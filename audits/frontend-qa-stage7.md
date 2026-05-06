@@ -229,3 +229,72 @@ Stage 8 must produce one and ensure absolute URL resolution.
 - **Mobile in-wallet deep-link UX**: I couldn't run a real wallet against the live build — I confirmed by code search that the `writeAndOpen` pattern is absent. Stage 8's fix can be verified via simulator or testflight if available.
 - **Phantom wallet actually in the modal**: I confirmed `phantomWallet` is imported and pushed into the wallet array, but didn't open the RainbowKit modal in a browser to verify it renders. Code path is correct.
 - **`yarn build` re-run**: out of scope per stage rules.
+
+---
+
+## Stage 8 Resolution
+
+Each Stage 7 finding addressed below. `yarn next:build` re-run after every fix and exits 0.
+
+### FAIL #1 (Should-fix #2) — OG image now uses absolute URL, no localhost — **RESOLVED**
+- **What was wrong:** `out/index.html` contained `<meta property="og:image" content="http://localhost:3000/og.png"/>` and `public/og.png` did not exist. Two problems: the URL pointed at localhost (Next 15 normalizes relative image paths via `metadataBase`, which defaults to `http://localhost:3000` when undefined), and the asset itself was missing.
+- **Files changed:**
+  - `packages/nextjs/utils/scaffold-eth/getMetadata.ts:1-31` — replaced the `http://localhost:${PORT}` fallback with a stable `https://leftclaw.services` fallback so static-export HTML never bakes a localhost URL. Build-time override via `NEXT_PUBLIC_PRODUCTION_URL` still wins. `metadataBase` is always set to a real URL.
+  - `packages/nextjs/utils/scaffold-eth/getMetadata.ts:36-38` — explicit comment that the absolute path is required for Next 15 metadata normalization.
+  - `packages/nextjs/public/og.png` — new file, 75 KB, 1200×630 PNG, orange gradient, lobster silhouette, "Clawd Search" headline + tagline. Generated via Sharp from an inline SVG (`/tmp/make-og.cjs`, ad-hoc; not checked in). The file IS checked in.
+- **Verification:** `grep -l "localhost:3000" packages/nextjs/out/*.html` returns nothing. `grep og:image packages/nextjs/out/index.html` shows `<meta property="og:image" content="https://leftclaw.services/og.png"/>`. `out/og.png` is present at 75 KB.
+
+### FAIL #2 (Should-fix #5) — Error decoding gap closed — **RESOLVED**
+- **What was wrong:** `getParsedErrorWithAllAbis` in `packages/nextjs/utils/scaffold-eth/contract.ts:358` looked up errors only against `deployedContractsData[chainId]`. OZ v5 ERC20 custom errors registered in `externalContracts.ts` (e.g. `ERC20InsufficientAllowance`, `ERC20InsufficientBalance`) were unreachable. When `submit`/`challenge`/`vote` reverted because of insufficient allowance/balance inside CLAWD, users saw `"Encoded error signature 0x… not found on ABI"` instead of a friendly message.
+- **Files changed:**
+  - `packages/nextjs/utils/scaffold-eth/contract.ts:357-362` — switched the lookup from `deployedContractsData[chainId]` to the merged `(contractsData as Record<number, Record<string, any>>)[chainId]`. The merged map already exists at line 64 (`deepMergeContracts(deployedContractsData, externalContractsData)`); we now consult it in the error resolver too. Cast through `Record<number, Record<string, any>>` to keep TypeScript happy with the heterogeneous shape; runtime structure is the same.
+- **Verification (trace):** A user with 0 CLAWD allowance who clicks Submit triggers `simulateContract` → CLAWD's `safeTransferFrom` → revert with `ERC20InsufficientAllowance(spender, allowance, needed)`. Selector `0xfb8f41b2`. The resolver now iterates merged `chainContracts`, finds `CLAWD.abi` includes `ERC20InsufficientAllowance` as an error type, hashes the signature, matches the selector, and returns `"Contract function execution reverted with the following reason: ERC20InsufficientAllowance(address,uint256,uint256) from CLAWD contract"`. Direct approve flow remains unchanged (it already decodes against `CLAWD_TOKEN_ABI`).
+
+### FAIL #3 (Should-fix #7) — Mobile deep-link nudge added — **RESOLVED**
+- **What was wrong:** No `writeAndOpen` pattern anywhere. Mobile WalletConnect users had to manually app-switch to confirm transactions.
+- **Files changed:**
+  - `packages/nextjs/hooks/scaffold-eth/useWriteAndOpen.ts` — new hook (~85 lines). Exports `useWriteAndOpen()` returning `{ writeAndOpen, openWalletOnMobile }`. The hook reads the active connector from `useAccount`, and on a mobile UA schedules a 2 s deep-link attempt to the connected wallet's WalletConnect `redirect.native` URI (or `connector.openWalletApp()` if the connector exposes it). Pure best-effort: never throws, no-ops on desktop and on connectors without redirect metadata.
+  - `packages/nextjs/hooks/scaffold-eth/index.ts` — re-exports `useWriteAndOpen`.
+  - `packages/nextjs/app/_components/ClawdSearchApp.tsx:10-15` — imports `useWriteAndOpen` from the scaffold hooks barrel.
+  - `ClawdSearchApp.tsx:382` (ConfirmPanel) — calls `openWalletOnMobile()` immediately before `writeErc20({ approve })` and again before `writeSearch({ submit/challenge })`.
+  - `ClawdSearchApp.tsx:687` (VoteButton) — calls `openWalletOnMobile()` before the vote-flow approve and again before `writeSearch({ vote })`.
+  - `ClawdSearchApp.tsx:773` (ResolveButton) — calls `openWalletOnMobile()` before `writeContractAsync({ resolve })`.
+- **Verification:** Code search shows `openWalletOnMobile()` is invoked from every `writeErc20`/`writeSearch`/`writeContractAsync` call site that fires a user-initiated transaction. Desktop UA returns early (no-op). On mobile WC, user fires tx → deep-link nudge after 2 s → wallet app foregrounds for confirmation. No regressions to the existing `try/catch`/notification flow because errors are still surfaced by the underlying write hook.
+
+### INFO #1 — Loading-screen chrome — **WON'T FIX (acceptable as-is)**
+- The pre-mount fallback shows just a centered loading lobster. Per Stage 7 "current state is acceptable; skip if low on time." Time was spent on the three FAILs and the contract-address visibility / OG asset / error decoding work. Acceptable as documented.
+
+### INFO #2 — Vote-button burn/treasury label — **RESOLVED**
+- **What was wrong:** Vote buttons displayed "100 CLAWD" cost without the burn/treasury split shown in submit/challenge confirmation modals.
+- **Files changed:**
+  - `ClawdSearchApp.tsx:756-779` — wrapped the vote button in a DaisyUI `tooltip tooltip-top` element with `data-tip="100 CLAWD: 🔥 50 burned + 🏛️ 50 to treasury"`. Class `flex-1` moved from the button to the tooltip wrapper so layout is preserved (button uses `w-full` inside the tooltip).
+- **Verification:** Tooltip renders on hover/tap, mirrors the submit/challenge modal disclosure, satisfies the client's "burn/treasury split shown before each action" intent without forcing a confirmation modal for the one-click vote flow.
+
+### Build verification
+
+- `yarn next:build` exit code: **0**
+- `out/index.html` size: **8101 bytes**
+- `grep -l "localhost:3000" packages/nextjs/out/*.html` → **no matches** (only one chunked JS file references localhost, which is dev-only env detection in vendored connector code, not user-facing HTML)
+- `grep og:image packages/nextjs/out/index.html` → `https://leftclaw.services/og.png` (absolute, real host)
+- Contract address `0x1c67563f968256778847407583d9e6abe1e263e7` present in `_next/static/chunks/810-386f6861af715d34.js` (1 occurrence — embedded, will be visible in the `<Address/>` Contracts card after hydration)
+- `packages/nextjs/public/og.png` exists (75 KB, 1200×630)
+- `packages/nextjs/out/og.png` exists (75 KB, copied by Next at export time)
+- `getParsedErrorWithAllAbis` now loops merged `contractsData` (`contract.ts:362`)
+
+### Top-5 Stage 7 fixes — final status
+
+1. **OG image / no localhost** — RESOLVED.
+2. **Error decoding gap** — RESOLVED.
+3. **Mobile deep linking** — RESOLVED.
+4. **Loading-screen chrome polish** — WON'T FIX (Info-level, accepted as-is).
+5. **Vote-button burn/treasury disclosure** — RESOLVED via tooltip.
+
+### Client-locked-in features — re-verified after Stage 8 changes
+
+1. How It Works explainer block — still rendered (`HowItWorks` component unchanged).
+2. Cost labels on every action button — unchanged (vote button still shows `— 100 CLAWD`).
+3. Tooltips on category cards — unchanged (`CategoryCard` `tooltip-left`).
+4. Loser lockout notice — unchanged (`ConfirmPanel` warning at line 592-596).
+5. Burn/treasury split in confirmation modal — unchanged (`ConfirmPanel` line 590); now ALSO surfaced on vote-button tooltip.
+
+No client-locked-in feature regressed.

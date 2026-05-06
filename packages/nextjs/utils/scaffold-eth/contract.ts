@@ -354,8 +354,12 @@ export const getParsedErrorWithAllAbis = (error: any, chainId: AllowedChainIds):
     }
 
     try {
-      // Get all deployed contracts for the current chain
-      const chainContracts = deployedContractsData[chainId as keyof typeof deployedContractsData];
+      // Get all contracts for the current chain. We look up against the MERGED
+      // `contractsData` (deployed + external) so that error selectors registered in
+      // `externalContracts.ts` (e.g. OZ v5 ERC20 custom errors like
+      // ERC20InsufficientAllowance / ERC20InsufficientBalance from the CLAWD token)
+      // can be resolved when they bubble up through ClawdSearch reverts.
+      const chainContracts = (contractsData as Record<number, Record<string, any>>)[chainId as number];
 
       if (!chainContracts) {
         return originalParsedError;

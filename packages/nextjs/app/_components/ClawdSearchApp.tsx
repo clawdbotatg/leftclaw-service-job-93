@@ -7,7 +7,12 @@ import { base } from "viem/chains";
 import { useAccount, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import deployedContracts from "~~/contracts/deployedContracts";
 import externalContracts from "~~/contracts/externalContracts";
-import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import {
+  useScaffoldEventHistory,
+  useScaffoldReadContract,
+  useScaffoldWriteContract,
+  useWriteAndOpen,
+} from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
 
 // ----------------------------------------------------------------------------
@@ -374,6 +379,7 @@ function ActionModal({
   const { writeContractAsync: writeSearch, isPending: actionPending } = useScaffoldWriteContract({
     contractName: "ClawdSearch",
   });
+  const { openWalletOnMobile } = useWriteAndOpen();
 
   const [waitingForAllowance, setWaitingForAllowance] = useState(false);
 
@@ -381,6 +387,10 @@ function ActionModal({
     if (!account) return;
     try {
       setWaitingForAllowance(true);
+      // Mobile WalletConnect users: schedule a deep-link back to the wallet
+      // app so the approval prompt becomes the foreground activity. No-op
+      // on desktop and on wallets that don't expose a redirect URI.
+      openWalletOnMobile();
       await writeErc20({
         chainId: CHAIN_ID,
         address: CLAWD_TOKEN_ADDRESS,
@@ -408,6 +418,8 @@ function ActionModal({
     if (!account || !picked) return;
     try {
       const fnName = kind === "submit" ? "submit" : "challenge";
+      // Same mobile deep-link nudge for the submit/challenge tx itself.
+      openWalletOnMobile();
       await writeSearch({
         functionName: fnName,
         args: [category, BigInt(picked.id)],
@@ -673,6 +685,7 @@ function VoteButton({
   const { writeContractAsync: writeSearch, isPending: actionPending } = useScaffoldWriteContract({
     contractName: "ClawdSearch",
   });
+  const { openWalletOnMobile } = useWriteAndOpen();
 
   const allowanceRead = useReadContract({
     chainId: CHAIN_ID,
@@ -705,6 +718,8 @@ function VoteButton({
       }
       if (allowance < VOTE_PRICE) {
         setWaitingForAllowance(true);
+        // Mobile WC: nudge wallet to foreground for approval prompt.
+        openWalletOnMobile();
         await writeErc20({
           chainId: CHAIN_ID,
           address: CLAWD_TOKEN_ADDRESS,
@@ -726,6 +741,8 @@ function VoteButton({
         });
         setWaitingForAllowance(false);
       }
+      // Mobile WC: nudge again for the vote tx itself.
+      openWalletOnMobile();
       await writeSearch({
         functionName: "vote",
         args: [category, forChallenger],
@@ -741,26 +758,32 @@ function VoteButton({
   const disabled = !account || hasUserVoted || !challengeOpen || approvePending || actionPending || waitingForAllowance;
   const pending = approvePending || actionPending || waitingForAllowance;
 
+  // Tooltip mirrors the burn/treasury split shown in submit/challenge confirmation
+  // modals — the vote action is a one-click flow without a confirmation modal,
+  // so we surface the split on hover/tap instead so users see where their CLAWD
+  // is going before they fire the tx.
   return (
-    <button
-      className={`btn btn-sm ${forChallenger ? "btn-warning" : "btn-info"} flex-1`}
-      onClick={handleVote}
-      disabled={disabled}
-    >
-      {pending ? (
-        <>
-          <span className="loading loading-spinner loading-xs"></span>
-          Voting…
-        </>
-      ) : hasUserVoted ? (
-        "✓ Voted"
-      ) : (
-        <>
-          {label}
-          <span className="opacity-70 text-xs">— 100 CLAWD</span>
-        </>
-      )}
-    </button>
+    <div className="tooltip tooltip-top flex-1" data-tip="100 CLAWD: 🔥 50 burned + 🏛️ 50 to treasury">
+      <button
+        className={`btn btn-sm ${forChallenger ? "btn-warning" : "btn-info"} w-full`}
+        onClick={handleVote}
+        disabled={disabled}
+      >
+        {pending ? (
+          <>
+            <span className="loading loading-spinner loading-xs"></span>
+            Voting…
+          </>
+        ) : hasUserVoted ? (
+          "✓ Voted"
+        ) : (
+          <>
+            {label}
+            <span className="opacity-70 text-xs">— 100 CLAWD</span>
+          </>
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -770,8 +793,11 @@ function VoteButton({
 
 function ResolveButton({ category, onResolved }: { category: Category; onResolved: () => void }) {
   const { writeContractAsync, isPending } = useScaffoldWriteContract({ contractName: "ClawdSearch" });
+  const { openWalletOnMobile } = useWriteAndOpen();
   const handle = async () => {
     try {
+      // Mobile WC: nudge wallet to foreground for the resolve tx.
+      openWalletOnMobile();
       await writeContractAsync({ functionName: "resolve", args: [category] });
       notification.success("Resolved!");
       onResolved();
