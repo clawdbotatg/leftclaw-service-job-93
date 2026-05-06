@@ -1,5 +1,8 @@
 {
-  name: 'Scaffold-ETH 2 DApp',
-  description: 'A DApp built with Scaffold-ETH',
-  iconPath: 'logo.svg'
+  "name": "Clawd Search",
+  "short_name": "Clawd Search",
+  "description": "Real lobsters compete for crowns across three absurd categories. Burn CLAWD to play.",
+  "icons": [
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any" }
+  ]
 }

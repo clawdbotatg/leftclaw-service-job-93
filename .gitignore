@@ -21,3 +21,22 @@ node_modules
 
 # cli
 dist
+
+# Next.js build output
+packages/nextjs/.next
+packages/nextjs/out
+packages/nextjs/tsconfig.tsbuildinfo
+
+# Foundry build artifacts
+packages/foundry/out
+packages/foundry/cache
+packages/foundry/broadcast
+
+# bgipfs upload config (contains api key)
+packages/nextjs/ipfs-upload.config.json
+ipfs-upload.config.json
+
+# env
+.env
+.env.local
+
