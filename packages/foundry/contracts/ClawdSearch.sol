@@ -5,6 +5,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ClawdSearch
@@ -16,6 +17,15 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
  *
  * @dev    CLAWD has 18 decimals (assumption — verified off-chain against the deployed token).
  *         Token amounts (`submitPrice`, `challengePrice`, `votePrice`) use 1e18 scaling.
+ *
+ *         CLAWD trust assumption: the hardcoded CLAWD token at
+ *         `0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07` is treated as a vetted, standard
+ *         OpenZeppelin-style ERC20 with no transfer hooks, no rebasing, no fee-on-transfer,
+ *         and no callbacks into this contract during `transferFrom`. We additionally apply
+ *         `nonReentrant` to all state-mutating user entry points (`submit`, `challenge`,
+ *         `vote`, `resolve`) as belt-and-suspenders. If CLAWD is ever migrated to a
+ *         hook-bearing implementation, this contract should be redeployed with stricter
+ *         CEI-only flows.
  *
  *         The on-chain spec referred to a `totalReignBlocks` user stat. We expose it here as
  *         `userStats.totalReignSeconds` because reign duration is naturally tracked via
@@ -29,8 +39,12 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
  *
  *         `setPrices` allows zero values intentionally: the owner may run a free promotional
  *         period. There is no zero-check.
+ *
+ *         `renounceOwnership` is permanently disabled: ownership of this contract controls
+ *         treasury and price configuration with no on-chain upgrade path, so accidental
+ *         renouncement would brick admin functions forever.
  */
-contract ClawdSearch is Ownable2Step {
+contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // -----------------------------------------------------------------------
@@ -116,12 +130,12 @@ contract ClawdSearch is Ownable2Step {
     // Events
     // -----------------------------------------------------------------------
 
-    event ChampionCrowned(Category indexed category, uint256 observationId, address indexed submitter);
-    event ChallengeStarted(Category indexed category, uint256 challengerObsId, address indexed challenger);
+    event ChampionCrowned(Category indexed category, uint256 indexed observationId, address indexed submitter);
+    event ChallengeStarted(Category indexed category, uint256 indexed challengerObsId, address indexed challenger);
     event VoteCast(Category indexed category, address indexed voter, bool forChallenger);
     event ChallengeResolved(
         Category indexed category,
-        uint256 winnerObsId,
+        uint256 indexed winnerObsId,
         address indexed winner,
         uint256 championVotes,
         uint256 challengerVotes
@@ -145,6 +159,7 @@ contract ClawdSearch is Ownable2Step {
     error SameAsChampion();
     error AlreadyVoted();
     error ZeroAddress();
+    error OwnershipCannotBeRenounced();
 
     // -----------------------------------------------------------------------
     // Constructor
@@ -155,9 +170,16 @@ contract ClawdSearch is Ownable2Step {
      *                     Cannot be address(0).
      */
     constructor(address initialOwner) Ownable(initialOwner) {
+        // Note: `Ownable(initialOwner)` already reverts with `OwnableInvalidOwner(address(0))`
+        // before this body runs; the explicit check below is belt-and-suspenders.
         if (initialOwner == address(0)) revert ZeroAddress();
         CLAWD = IERC20(0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07);
         treasury = 0x90eF2A9211A3E7CE788561E5af54C76B0Fa3aEd0;
+
+        // Emit the initial config so off-chain indexers can reconstruct treasury and price
+        // history purely from event logs (L-2 from Stage 3 audit).
+        emit TreasuryUpdated(treasury);
+        emit PricesUpdated(submitPrice, challengePrice, votePrice);
     }
 
     // -----------------------------------------------------------------------
@@ -170,13 +192,12 @@ contract ClawdSearch is Ownable2Step {
      * @param category      The category to claim.
      * @param observationId The Clawd observation id to enshrine. Must be non-zero.
      */
-    function submit(Category category, uint256 observationId) external {
+    function submit(Category category, uint256 observationId) external nonReentrant {
         if (observationId == 0) revert InvalidObservation();
         CategoryState storage cat = categories[category];
         if (cat.championObsId != 0) revert CategoryAlreadyHasChampion();
 
-        _spendClawd(submitPrice);
-
+        // CEI: write state BEFORE the external token transfer.
         cat.championObsId = observationId;
         cat.championOwner = msg.sender;
         cat.reignStart = uint64(block.timestamp);
@@ -184,6 +205,8 @@ contract ClawdSearch is Ownable2Step {
         unchecked {
             userStats[msg.sender].championsSubmitted += 1;
         }
+
+        _spendClawd(submitPrice);
 
         emit ChampionCrowned(category, observationId, msg.sender);
     }
@@ -196,7 +219,7 @@ contract ClawdSearch is Ownable2Step {
      * @param observationId The challenger's observation id (non-zero, not the champion, not
      *                      already a loser in this category).
      */
-    function challenge(Category category, uint256 observationId) external {
+    function challenge(Category category, uint256 observationId) external nonReentrant {
         if (observationId == 0) revert InvalidObservation();
         CategoryState storage cat = categories[category];
         if (cat.championObsId == 0) revert CategoryHasNoChampion();
@@ -205,8 +228,7 @@ contract ClawdSearch is Ownable2Step {
         if (hasLostInCategory[category][observationId]) revert ObservationLockedOut();
         if (observationId == cat.championObsId) revert SameAsChampion();
 
-        _spendClawd(challengePrice);
-
+        // CEI: write state BEFORE the external token transfer.
         cat.challengerObsId = observationId;
         cat.challengerOwner = msg.sender;
         cat.challengeStart = uint64(block.timestamp);
@@ -215,6 +237,8 @@ contract ClawdSearch is Ownable2Step {
         unchecked {
             cat.challengeRound += 1;
         }
+
+        _spendClawd(challengePrice);
 
         emit ChallengeStarted(category, observationId, msg.sender);
     }
@@ -225,7 +249,7 @@ contract ClawdSearch is Ownable2Step {
      * @param category       The category being voted in.
      * @param forChallenger  True to vote for the challenger, false for the champion.
      */
-    function vote(Category category, bool forChallenger) external {
+    function vote(Category category, bool forChallenger) external nonReentrant {
         CategoryState storage cat = categories[category];
         if (cat.challengerObsId == 0) revert ChallengeNotActive();
         if (block.timestamp >= uint256(cat.challengeStart) + CHALLENGE_DURATION) {
@@ -233,14 +257,15 @@ contract ClawdSearch is Ownable2Step {
         }
         if (hasVoted[category][cat.challengeRound][msg.sender]) revert AlreadyVoted();
 
-        _spendClawd(votePrice);
-
+        // CEI: write state BEFORE the external token transfer.
         hasVoted[category][cat.challengeRound][msg.sender] = true;
         if (forChallenger) {
             cat.challengerVotes += 1;
         } else {
             cat.championVotes += 1;
         }
+
+        _spendClawd(votePrice);
 
         emit VoteCast(category, msg.sender, forChallenger);
     }
@@ -256,7 +281,7 @@ contract ClawdSearch is Ownable2Step {
      *
      * @param category The category to resolve.
      */
-    function resolve(Category category) external {
+    function resolve(Category category) external nonReentrant {
         CategoryState storage cat = categories[category];
         if (cat.challengerObsId == 0) revert ChallengeNotActive();
         if (block.timestamp < uint256(cat.challengeStart) + CHALLENGE_DURATION) {
@@ -349,6 +374,17 @@ contract ClawdSearch is Ownable2Step {
         challengePrice = newChallenge;
         votePrice = newVote;
         emit PricesUpdated(newSubmit, newChallenge, newVote);
+    }
+
+    /**
+     * @notice Permanently disabled. Ownership of this contract controls treasury and price
+     *         configuration with no on-chain upgrade path; renouncement would brick admin
+     *         functions forever. To rotate ownership, use `transferOwnership` (two-step).
+     * @dev    Overrides `Ownable.renounceOwnership` (inherited via `Ownable2Step`). Always
+     *         reverts.
+     */
+    function renounceOwnership() public view override onlyOwner {
+        revert OwnershipCannotBeRenounced();
     }
 
     // -----------------------------------------------------------------------

@@ -194,3 +194,122 @@ The Low findings are nice-to-haves; **L-2 (constructor events) and L-3 (indexed 
 ---
 
 *End of report.*
+
+---
+
+## Stage 4 Resolution
+
+Every Medium / Low / Info finding from the audit above has been triaged and resolved as documented below. After all changes:
+
+- `forge build` exits 0 (compilation successful, three pre-existing `unsafe-typecast` lints retained — unrelated to audit findings).
+- `forge test` exits 0 — **41 tests passing** (28 original + 13 added in this stage), 0 failures, 0 skipped.
+
+### Medium findings
+
+#### M-1 — CEI violation / reentrancy defense in depth
+**Resolution:** FIXED.
+- Inherited `ReentrancyGuard` and applied `nonReentrant` to `submit`, `challenge`, `vote`, and `resolve` (`ClawdSearch.sol`).
+- Reordered every state mutation in `submit`, `challenge`, and `vote` to occur BEFORE the external `_spendClawd` call (proper Checks-Effects-Interactions). The `nonReentrant` modifier is now belt-and-suspenders.
+- Added a NatSpec block at the contract header explicitly documenting the CLAWD trust assumption (vetted standard ERC20, no transfer hooks, no fee-on-transfer, no callbacks).
+- All existing tests continue to pass — re-ordering writes did not regress any invariant.
+
+#### M-2 — `renounceOwnership` not overridden
+**Resolution:** FIXED.
+- Added `error OwnershipCannotBeRenounced();` and overrode `renounceOwnership()` to revert with that error.
+- The override is `public view override onlyOwner` so the standard owner-check fires for non-owner callers (preserving the OZ behavior of `OwnableUnauthorizedAccount` for non-owners).
+- Added two new tests: `test_renounceOwnership_revertsForOwner` and `test_renounceOwnership_revertsForNonOwner`.
+
+#### M-3 — Missing test for odd-amount burn/treasury split
+**Resolution:** FIXED.
+- Added `test_oddAmountSplit_burnGetsLargerHalf` which sets `submitPrice = 101` (wei), runs a single submit, and asserts BURN_ADDRESS gained 51 while TREASURY gained 50.
+
+#### M-4 — Missing test for `hasVoted` round-scoping
+**Resolution:** FIXED.
+- Added `test_hasVoted_roundScopingAcrossConsecutiveChallenges` covering: carol votes in round 1, resolve fires, a new challenge opens (round 2), carol votes again successfully. Round-1 storage remains true (per-round independence) and a second vote inside round 2 reverts with `AlreadyVoted`.
+
+#### M-5 — Missing tests for SafeERC20 reverts and price-change behavior
+**Resolution:** FIXED.
+- `test_submit_revertsOnInsufficientAllowance` — drops alice's allowance below `submitPrice` and asserts the call reverts.
+- `test_submit_revertsOnInsufficientBalance` — drains alice's balance and asserts the call reverts.
+- `test_setPrices_zeroAllowsFullCycleWithoutPaying` — sets `(0,0,0)`, drains all four participants, and runs a full submit/challenge/vote/resolve cycle without any CLAWD movement.
+- `test_setTreasury_routesNextSpendToNewAddress` — sets a new treasury, runs a submit, asserts new treasury gained 500 CLAWD and old treasury was untouched.
+- `vm.expectEmit` field-level matching tests for all four player-facing events: `test_emit_championCrowned_onSubmit`, `test_emit_challengeStarted_onChallenge`, `test_emit_voteCast_onVote`, `test_emit_challengeResolved_onResolve`.
+
+### Low findings
+
+#### L-1 — Constructor zero-address check is unreachable
+**Resolution:** WON'T FIX (kept as belt-and-suspenders).
+- The OZ `Ownable(initialOwner)` check fires first; the explicit `if (initialOwner == address(0)) revert ZeroAddress();` is unreachable. We KEEP the check as defensive code (and added a NatSpec note explaining it's belt-and-suspenders) — the `ZeroAddress` selector is still used by `setTreasury`, so the error remains live. Removing the check would save trivial bytecode but obscures intent. Cost: dead branch in the constructor; benefit: explicit documentation that zero-owner is forbidden.
+
+#### L-2 — Constructor sets treasury and default prices but emits no events
+**Resolution:** FIXED.
+- Constructor now emits `TreasuryUpdated(treasury)` and `PricesUpdated(submitPrice, challengePrice, votePrice)` after assignment.
+- Added `test_constructor_emitsInitialConfigEvents` verifying both events are emitted with the correct values from a fresh deployment.
+
+#### L-3 — `observationId` not indexed in events
+**Resolution:** FIXED.
+- `ChampionCrowned`: now indexes `category`, `observationId`, `submitter` (3 indexed — fits).
+- `ChallengeStarted`: now indexes `category`, `challengerObsId`, `challenger` (3 indexed — fits).
+- `ChallengeResolved`: now indexes `category`, `winnerObsId`, `winner` (3 indexed — fits). `championVotes` and `challengerVotes` remain in non-indexed data (frontends typically need values directly, not as filters).
+- `VoteCast` unchanged — it had only 2 indexed (`category`, `voter`); the third field is `bool forChallenger` which is more useful as data.
+
+#### L-4 — `_spendClawd` does two `safeTransferFrom` calls
+**Resolution:** WON'T FIX. The auditor self-demoted this to Info-grade and confirmed that consolidating the calls would not save SSTOREs on the token contract (still two balance writes regardless). The current pattern is the cleanest defensible design.
+
+#### L-5 — `categoryChampionWins` semantics deviation from spec literal
+**Resolution:** WON'T FIX (no code change).
+- NatSpec already documents the metric. Re-reading the spec, "total wins for leaderboard" most naturally maps to "total successful resolves while in possession of the throne," which is what the implementation counts. Confirming with the client would require a round-trip outside this stage's scope; the documented behavior is defensible and the dApp can present the metric accurately.
+
+#### L-6 — No view function for "current reign duration"
+**Resolution:** WON'T FIX in this stage.
+- Pure UX nicety. The frontend can compute `block.timestamp - cat.reignStart` from `getCategory()` directly. Adding a view function would require touching the contract surface for zero on-chain benefit; defer to a frontend helper.
+
+#### L-7 — Test scaffolding uses `vm.etch` without running constructor
+**Resolution:** WON'T FIX in this stage.
+- Tests are functionally correct (no test reads `_name`/`_symbol` from `CLAWD_ADDR`). Switching to `deployCodeTo` is invasive — would change the entire test setUp pattern and potentially destabilize the existing 28-test suite. Defer until a future test-quality pass.
+
+#### L-8 — `setPrices(0, 0, 0)` makes the contract free
+**Resolution:** ACKNOWLEDGED, no code change.
+- Documented as intentional. The new `test_setPrices_zeroAllowsFullCycleWithoutPaying` test now codifies this behavior. Sybil-resistance during free periods is an off-chain concern, consistent with the spec.
+
+### Info findings
+
+#### I-1 — CLAWD token hardcoded; no upgrade path
+**Resolution:** ACKNOWLEDGED. No on-chain upgrade path is desirable for a "trustless tournament" framing. Documented in the new contract header NatSpec block.
+
+#### I-2 — `block.timestamp` casts to `uint64`
+**Resolution:** ACKNOWLEDGED. Safe well past any realistic operational horizon.
+
+#### I-3 — `unchecked` blocks on counters
+**Resolution:** ACKNOWLEDGED. Auditor confirmed the optimizations are correct.
+
+#### I-4 — Front-running / vote-sniping
+**Resolution:** ACKNOWLEDGED. Spec-accepted; cost-to-grief scales with vote count.
+
+#### I-5 — CLAWD pause / blacklist risk
+**Resolution:** ACKNOWLEDGED. Consistent with the trustless framing. The new contract header NatSpec block covers this assumption.
+
+### Summary table
+
+| ID | Severity | Status | Where |
+|----|----------|--------|-------|
+| M-1 | Medium | Fixed | `ClawdSearch.sol` (ReentrancyGuard + CEI reordering + NatSpec) |
+| M-2 | Medium | Fixed | `ClawdSearch.sol` (`renounceOwnership` override, new error) |
+| M-3 | Medium | Fixed | `ClawdSearch.t.sol` (odd-amount split test) |
+| M-4 | Medium | Fixed | `ClawdSearch.t.sol` (cross-round hasVoted test) |
+| M-5 | Medium | Fixed | `ClawdSearch.t.sol` (allowance/balance reverts, free-cycle, treasury routing, expectEmit on all 4 events) |
+| L-1 | Low | Won't fix | Kept as belt-and-suspenders; NatSpec note added |
+| L-2 | Low | Fixed | Constructor emits initial config events |
+| L-3 | Low | Fixed | Indexed `observationId`/`winnerObsId`/`challengerObsId` on the three resolve/submit/challenge events |
+| L-4 | Low | Won't fix | Auditor self-demoted to Info; no real gas savings available |
+| L-5 | Low | Won't fix | NatSpec documents deviation; defensible interpretation |
+| L-6 | Low | Won't fix | Frontend can compute from `getCategory()` |
+| L-7 | Low | Won't fix in this stage | Tests functionally correct; defer to test-quality pass |
+| L-8 | Low | Acknowledged | Documented + new test codifies the free-cycle behavior |
+| I-1..I-5 | Info | Acknowledged | Trust assumptions documented in contract header NatSpec |
+
+### Test count after Stage 4
+- Original: 28 passing.
+- Added in Stage 4: 13 (2 for renounceOwnership, 11 in `ClawdSearchAuditFixesTest`).
+- **Final: 41 passing, 0 failing, 0 skipped.**
+
