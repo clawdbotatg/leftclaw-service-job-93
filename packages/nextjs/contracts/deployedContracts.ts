@@ -4,6 +4,857 @@
  */
 import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 
-const deployedContracts = {} as const;
+const deployedContracts = {
+  8453: {
+    ClawdSearch: {
+      address: "0x1c67563f968256778847407583d9e6abe1e263e7",
+      abi: [
+        {
+          type: "constructor",
+          inputs: [
+            {
+              name: "initialOwner",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "BURN_ADDRESS",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "CHALLENGE_DURATION",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "CLAWD",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "contract IERC20",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "COOLDOWN",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "acceptOwnership",
+          inputs: [],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "categories",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+          ],
+          outputs: [
+            {
+              name: "championObsId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "championOwner",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "challengerObsId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "challengerOwner",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "championVotes",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "challengerVotes",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "challengeStart",
+              type: "uint64",
+              internalType: "uint64",
+            },
+            {
+              name: "cooldownEnd",
+              type: "uint64",
+              internalType: "uint64",
+            },
+            {
+              name: "reignStart",
+              type: "uint64",
+              internalType: "uint64",
+            },
+            {
+              name: "challengeRound",
+              type: "uint64",
+              internalType: "uint64",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "categoryChampionWins",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "challenge",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "observationId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "challengeDeadline",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint64",
+              internalType: "uint64",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "challengePrice",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "getCategory",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "tuple",
+              internalType: "struct ClawdSearch.CategoryState",
+              components: [
+                {
+                  name: "championObsId",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "championOwner",
+                  type: "address",
+                  internalType: "address",
+                },
+                {
+                  name: "challengerObsId",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "challengerOwner",
+                  type: "address",
+                  internalType: "address",
+                },
+                {
+                  name: "championVotes",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "challengerVotes",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "challengeStart",
+                  type: "uint64",
+                  internalType: "uint64",
+                },
+                {
+                  name: "cooldownEnd",
+                  type: "uint64",
+                  internalType: "uint64",
+                },
+                {
+                  name: "reignStart",
+                  type: "uint64",
+                  internalType: "uint64",
+                },
+                {
+                  name: "challengeRound",
+                  type: "uint64",
+                  internalType: "uint64",
+                },
+              ],
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "hasLostInCategory",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "hasVoted",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "",
+              type: "uint64",
+              internalType: "uint64",
+            },
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "isChallengeActive",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "owner",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "pendingOwner",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "renounceOwnership",
+          inputs: [],
+          outputs: [],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "resolve",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "setPrices",
+          inputs: [
+            {
+              name: "newSubmit",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "newChallenge",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "newVote",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "setTreasury",
+          inputs: [
+            {
+              name: "newTreasury",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "submit",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "observationId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "submitPrice",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "transferOwnership",
+          inputs: [
+            {
+              name: "newOwner",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "treasury",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "userStats",
+          inputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "championsSubmitted",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "challengesWon",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "totalReignSeconds",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "vote",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "forChallenger",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "votePrice",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "event",
+          name: "ChallengeResolved",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              indexed: true,
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "winnerObsId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "winner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "championVotes",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "challengerVotes",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "ChallengeStarted",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              indexed: true,
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "challengerObsId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "challenger",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "ChampionCrowned",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              indexed: true,
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "observationId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "submitter",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OwnershipTransferStarted",
+          inputs: [
+            {
+              name: "previousOwner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "newOwner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OwnershipTransferred",
+          inputs: [
+            {
+              name: "previousOwner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "newOwner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "PricesUpdated",
+          inputs: [
+            {
+              name: "submitPrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "challengePrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "votePrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "TreasuryUpdated",
+          inputs: [
+            {
+              name: "newTreasury",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "VoteCast",
+          inputs: [
+            {
+              name: "category",
+              type: "uint8",
+              indexed: true,
+              internalType: "enum ClawdSearch.Category",
+            },
+            {
+              name: "voter",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "forChallenger",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "error",
+          name: "AlreadyVoted",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "CategoryAlreadyHasChampion",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "CategoryHasNoChampion",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ChallengeAlreadyActive",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ChallengeNotActive",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ChallengeWindowClosed",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ChallengeWindowOpen",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "InvalidObservation",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ObservationLockedOut",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "OnCooldown",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "OwnableInvalidOwner",
+          inputs: [
+            {
+              name: "owner",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "OwnableUnauthorizedAccount",
+          inputs: [
+            {
+              name: "account",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "OwnershipCannotBeRenounced",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ReentrancyGuardReentrantCall",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "SafeERC20FailedOperation",
+          inputs: [
+            {
+              name: "token",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "SameAsChampion",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ZeroAddress",
+          inputs: [],
+        },
+      ],
+      inheritedFunctions: {},
+      deployedOnBlock: 45623552,
+    },
+  },
+} as const;
 
 export default deployedContracts satisfies GenericContractsDeclaration;
