@@ -34,6 +34,9 @@ const isMobileUA = (): boolean => {
 
 const tryOpenWalletApp = async (connector: any): Promise<void> => {
   if (!connector || typeof window === "undefined") return;
+  // Skip deep-link when already inside a wallet's in-app browser — window.ethereum
+  // is injected there, so navigating to the wallet URI scheme would cause a redirect loop.
+  if (typeof (window as any).ethereum !== "undefined") return;
   try {
     // Some connectors (Safe, etc.) expose openWalletApp directly.
     if (typeof connector.openWalletApp === "function") {

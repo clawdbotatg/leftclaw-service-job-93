@@ -13,7 +13,7 @@ import {
   useScaffoldWriteContract,
   useWriteAndOpen,
 } from "~~/hooks/scaffold-eth";
-import { notification } from "~~/utils/scaffold-eth";
+import { getParsedError, notification } from "~~/utils/scaffold-eth";
 
 // ----------------------------------------------------------------------------
 // Constants
@@ -522,7 +522,7 @@ function ActionModal({
     } catch (e) {
       setWaitingForAllowance(false);
       console.error(e);
-      notification.error("Approval failed or was rejected");
+      notification.error(getParsedError(e));
     }
   };
 
@@ -542,7 +542,7 @@ function ActionModal({
       onClose();
     } catch (e) {
       console.error(e);
-      notification.error("Transaction failed or was rejected");
+      notification.error(getParsedError(e));
     }
   };
 
@@ -909,7 +909,7 @@ function VoteButton({
     } catch (e) {
       setWaitingForAllowance(false);
       console.error(e);
-      notification.error("Vote failed or was rejected");
+      notification.error(getParsedError(e));
     }
   };
 
@@ -959,7 +959,7 @@ function ResolveButton({ categoryId, onResolved }: { categoryId: number; onResol
       onResolved();
     } catch (e) {
       console.error(e);
-      notification.error("Resolve failed or was rejected");
+      notification.error(getParsedError(e));
     }
   };
   return (

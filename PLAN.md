@@ -1,3 +1,33 @@
+# Feature Plan — Job #155: Apply AUDIT.md Fixes (Job 149 QA Report)
+
+## Mode
+leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
+
+## Changes
+
+### 1. README.md — stale content (SB-8)
+- Fix contract address: 0x1C67563F... → 0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74
+- Update categories to the 6 live ones (penguin, lobster, frog, cutest, camouflage, best eyes)
+
+### 2. ClawdSearchApp.tsx — error translation (SF-9 / UX-7)
+- Import getParsedError from ~~/utils/scaffold-eth
+- Use getParsedError(e) in all catch blocks for contract-specific errors
+
+### 3. wagmiConfig.tsx — RPC reliability (SF-6 / UX-5)
+- Remove bare http() from fallback chain when real Alchemy key is in use
+
+### 4. useWriteAndOpen.ts — mobile guard (SF-13)
+- Add window.ethereum check: skip deep-link if already inside wallet browser
+
+### 5. .env.production — bake Alchemy key + OG URL (SF-6, SF-4)
+- Set NEXT_PUBLIC_ALCHEMY_API_KEY and NEXT_PUBLIC_PRODUCTION_URL
+
+## Out of scope
+- USD/CLAWD price conversion (SF-3, UX-4) — no Uniswap price utility in repo
+- Contract verification (SB-5 MANUAL) — requires Etherscan key
+
+---
+
 # Feature Plan — Job #154: Text Fixes + Submit Champion Error
 
 ## Mode

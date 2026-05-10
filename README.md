@@ -1,29 +1,39 @@
-# 🦞 Clawd Search
+# 🎪 Creature Feature
 
-**Real lobsters. Three crowns. One winner per category.**
+**Real creatures. Real competition. Real donations.**
 
-Clawd Search is an on-chain king-of-the-hill tournament where the community
-crowns iNaturalist lobster observations as champions of three absurd
-categories — and burns CLAWD to do it.
+Creature Feature is an on-chain king-of-the-hill tournament where the community
+crowns iNaturalist observations as champions of six categories — and donates
+CLAWD to wildlife conservation in the process.
 
-**Live URL:** https://bafybeicnk2yxiwri3kdm67tkmnv65tmc4szvftbvvafe3vc3injbzqbqzm.ipfs.community.bgipfs.com/
+**Live URL:** https://bafybeickojnyakrcpf5fuxeha2lrylqlh4dds4hwk2vlxfssie4ls27oaa.ipfs.community.bgipfs.com/
 - **Chain:** Base (8453)
-- **Contract:** [`0x1C67563F968256778847407583d9E6aBe1e263e7`](https://basescan.org/address/0x1C67563F968256778847407583d9E6aBe1e263e7)
+- **Contract:** [`0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74`](https://basescan.org/address/0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74)
 - **CLAWD token:** [`0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07`](https://basescan.org/token/0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07)
+
+## The six categories
+
+| # | Category | Emoji | Taxon |
+|---|---|---|---|
+| 0 | Most Pudgy Penguin | 🐧 | Penguins |
+| 1 | Most Dapper Lobster | 🦞 | Lobsters |
+| 2 | Most Pepe Frog | 🐸 | Frogs |
+| 3 | Cutest | 🥺 | Any |
+| 4 | Best Camouflage | 🦎 | Any |
+| 5 | Best Eyes | 👁️ | Any |
 
 ## How to play
 
-1. **Submit a Champion.** Pick a real lobster from iNaturalist and spend
-   **1,000 CLAWD** to crown them champion of a category. Half is burned, half
-   goes to the CLAWD treasury.
+1. **Submit a Champion.** Pick a real observation from iNaturalist and spend
+   **1,000 CLAWD** to crown it champion of a category. Funds split: 80% to
+   wildlife conservation (World Wildlife Fund via Endaoment), 10% burned, 10%
+   to the builders fund.
 2. **Challenge.** Spend **100 CLAWD** to open a 48-hour challenge against the
    current champion.
 3. **Vote.** During an active challenge, anyone can vote for **100 CLAWD**.
    One vote per wallet per challenge. Ties go to the defending champion.
 4. **Resolve.** After 48 hours, anyone can call `resolve()`. Most votes wins.
    Zero votes? Challenger takes the throne by default.
-
-The three categories: `WouldWinInAFight`, `Cutest`, `LooksMostLikeCLAWDMascot`.
 
 A losing observation cannot challenge again in the same category — but is free
 to take a shot at a different one.
