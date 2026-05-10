@@ -1,3 +1,63 @@
+# Feature Plan — Job #154: Text Fixes + Submit Champion Error
+
+## Mode
+leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
+
+## Root cause investigation — submit champion error
+- TypeScript check passes — no type errors
+- Code logic is correct — no obvious JS render error found
+- polyfill-localstorage.cjs was missing from git (present on filesystem at prior build time)
+- se2-prep run: polyfill restored, ScaffoldEthAppWithProviders and next.config.ts verified
+- Fresh rebuild with polyfill in place should fix any corrupted static export from prior build
+
+## Changes
+
+### 1. "Drinks Tea. Builds Things;" → "Drinks Tea. Builds Things."
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+CATEGORY_CONFIG id=1 tagline — change semicolon to period.
+
+### 2. "Real Donations" → "Real donations." on same plane as "Real creatures. Real competition."
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+Header section — merge into one paragraph so they appear at the same visual level.
+Change "Real Donations" → "Real donations."
+
+### 3. "USDC to wildlife" → "USDC to World Wildlife Fund"
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+StatStrip — change the label under the charity stat box.
+
+---
+
+_Previous plans preserved below for reference._
+
+# Feature Plan — Job #152: Audit Bug Fixes + Text Changes
+
+## Mode
+leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
+
+## Changes
+
+### 1. Fix stale-closure bug in approval polling (SB-4)
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+- In `handleApprove` (ActionModal): use `refetch()` return value, not stale `allowanceRead.data`.
+- In `handleVote` (VoteButton): same fix for the promise-based poll.
+
+### 2. Fix silent error handling (SF-9)
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+- In `handleAction`: add `notification.error(...)` in the empty catch block.
+- In `ResolveButton.handle`: add `notification.error(...)` in the empty catch block.
+
+### 3. Fix wrong contract address in Footer (SB-8)
+File: `packages/nextjs/components/Footer.tsx`
+- Change `CONTRACT_ADDRESS` from `0x1C67563F968256778847407583d9E6aBe1e263e7`
+  to `0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74`.
+
+### 4. Text changes (customer request)
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+- Change tagline for category id=1 from `"Anthropic-y. Scarlet. Pixel-poet."` → `"Drinks Tea. Builds Things;"`.
+- After `Real creatures. Real competition.` add `Real Donations` as a new paragraph.
+
+---
+
 # Feature Plan — Job #148: Phase 3 — Charity Routing + 3-Way Split + About Page
 
 ## Scope
@@ -32,120 +92,3 @@
 - UNISWAP_V3_ROUTER (SwapRouter02): 0x2626664c2603336E57B271c5C0b26F421741e481
 - UNISWAP_V3_QUOTER (QuoterV2): 0x3d4e44Eb1374240CE5F1B136041212F0CF5d0990
 - Treasury: 0x90eF2A9211A3E7CE788561E5af54C76B0Fa3aEd0
-
----
-
-# Feature Plan — Job #146: Creature Feature Phase 2 (Six Active Crowns + Dynamic Categories)
-
----
-
-_Phase 1 plan below for reference (Job 144):_
-
-# Feature Plan — Job 144: Creature Feature Visual + Identity Reset (Phase 1)
-
-## Mode
-leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
-
-## Scope (all frontend-only, no contract changes)
-
-### 1. Rebrand metadata + header
-- layout.tsx: title="Creature Feature", description="Real creatures. Real competition."
-- Header.tsx: text wordmark "Creature Feature" + tagline "Real creatures. Real competition.", drop 🦞
-- page.tsx: update loading spinner emoji + text
-- icon.svg: change favicon emoji from 🦞 to 🐾
-
-### 2. iNaturalist scope expansion
-- fetchCreatureList (was fetchLobsterList): taxon_id=1 instead of taxon_name=Homarus
-- Cache key: clawd:creatures:Animalia (was clawd:lobsters:Homarus)
-- "Random Lobster" → "Random Creature"; counter text "X lobsters" → "X creatures"
-- fetchObservation fallback: "Lobster" → "Creature"
-
-### 3. Homepage 6-card grid
-- ACTIVE_CATEGORIES = [Cutest, LooksMostLikeCLAWDMascot] (WouldWinInAFight hidden)
-- CATEGORY_META updated: LooksMostLikeCLAWDMascot displays as "Most Dapper Lobster"
-- Add PLACEHOLDER_CARDS array (Most Pepe Frog, Most Pudgy Penguin, Best Bug, Best Eyes)
-- Add PlaceholderCard component (Coming Soon badge, muted style, no CTAs)
-- Grid: grid-cols-1 md:grid-cols-3, 2 active + 4 placeholder = 6 cards (3x2)
-
-### 4. Lobster → creature copy site-wide
-- Modal subtitle, picker headers, error messages, HowItWorks, WalletStrip network msg
-- 404 photo placeholder → "This creature has returned to the wild…"
-- Challenge confirm warning → "If your creature loses…"
-- Hall of Fame uses ACTIVE_CATEGORIES (drops WouldWinInAFight lane)
-
-### 5. UI improvements
-- Add hero section above grid: large "Creature Feature" wordmark + tagline
-- Section header: "The Three Thrones" → "The Crowns"
-- Placeholder cards look intentional (styled, slightly muted, badge)
-- Mobile: existing responsive classes are already touch-friendly
-
-## Files changed (Phase 1)
-- packages/nextjs/app/layout.tsx
-- packages/nextjs/app/icon.svg
-- packages/nextjs/app/page.tsx
-- packages/nextjs/components/Header.tsx
-- packages/nextjs/app/_components/ClawdSearchApp.tsx
-
----
-
-# Phase 2 Plan — Job #146
-
-## Contract changes (ClawdSearch.sol)
-- Remove `enum Category`; add `CategoryData` struct + `mapping(uint256 => CategoryData)`
-- Rename old `categories` mapping → `categoryStates`
-- Add `nextCategoryId` counter
-- Re-key all per-category storage with `uint256 categoryId`
-- Constructor seeds 6 categories via `_seedCategory(name, taxonId)`
-- `addCategory(string, uint32) external onlyOwner returns (uint256)` + `setCategoryActive`
-- All user functions take `uint256 categoryId`; events emit `uint256 indexed categoryId`
-- New events: CategoryAdded, CategorySetActive
-
-## Category IDs (seed order)
-- 0: Most Pudgy Penguin  taxon 3956
-- 1: Most Dapper Lobster taxon 47764
-- 2: Most Pepe Frog      taxon 20979
-- 3: Cutest              taxon 1
-- 4: Best Camouflage     taxon 1
-- 5: Best Eyes           taxon 1
-
-## Frontend changes
-- Replace Category enum + CATEGORY_META with CATEGORY_CONFIG[6]
-- `fetchCreaturePage(taxonId, page)`: per_page=200, paginated
-- ActionModal: taxonId prop; Load More; direct obs ID input
-- Homepage: 3×2 grid, all 6 active cards, no placeholders
-- Hall of Fame: per category (categoryId 0-5)
-
-## Files to modify
-- packages/foundry/contracts/ClawdSearch.sol (full rewrite)
-- packages/foundry/test/ClawdSearch.t.sol (update all enum refs)
-- packages/nextjs/contracts/deployedContracts.ts (auto-regen after deploy)
-- packages/nextjs/app/_components/ClawdSearchApp.tsx (full rewrite of logic layer)
-
----
-
-# Feature Plan — Job 152: Audit Bug Fixes + Text Changes
-
-## Mode
-leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
-
-## Changes
-
-### 1. Fix stale-closure bug in approval polling (SB-4)
-File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
-- In `handleApprove` (ActionModal): use `refetch()` return value, not stale `allowanceRead.data`.
-- In `handleVote` (VoteButton): same fix for the promise-based poll.
-
-### 2. Fix silent error handling (SF-9)
-File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
-- In `handleAction`: add `notification.error(...)` in the empty catch block.
-- In `ResolveButton.handle`: add `notification.error(...)` in the empty catch block.
-
-### 3. Fix wrong contract address in Footer (SB-8)
-File: `packages/nextjs/components/Footer.tsx`
-- Change `CONTRACT_ADDRESS` from `0x1C67563F968256778847407583d9E6aBe1e263e7`
-  to `0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74`.
-
-### 4. Text changes (customer request)
-File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
-- Change tagline for category id=1 from `"Anthropic-y. Scarlet. Pixel-poet."` → `"Drinks Tea. Builds Things;"`.
-- After `Real creatures. Real competition.` add `Real Donations` as a new paragraph.

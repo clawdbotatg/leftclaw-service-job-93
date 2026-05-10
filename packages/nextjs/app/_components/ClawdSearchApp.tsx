@@ -45,7 +45,7 @@ const CATEGORY_CONFIG = [
     id: 1,
     title: "Most Dapper Lobster",
     emoji: "🦞",
-    tagline: "Drinks Tea. Builds Things;",
+    tagline: "Drinks Tea. Builds Things.",
     taxonId: 47764,
     hint: "Lobsters only",
   },
@@ -1558,7 +1558,7 @@ function StatStrip() {
       </div>
       <div className="bg-base-100 border border-base-300 rounded-lg p-3">
         <div className="text-lg font-bold">🌿 ${usdcFormatted}</div>
-        <div className="text-xs opacity-60">USDC to wildlife</div>
+        <div className="text-xs opacity-60">USDC to World Wildlife Fund</div>
       </div>
     </div>
   );
@@ -1574,8 +1574,7 @@ export default function ClawdSearchApp() {
       <main className="max-w-6xl mx-auto px-4 py-8 w-full flex flex-col gap-6">
         <header className="text-center py-4">
           <h1 className="text-5xl sm:text-6xl font-bold my-2 tracking-tight">Creature Feature</h1>
-          <p className="opacity-70 my-2 text-lg">Real creatures. Real competition.</p>
-          <p className="opacity-70 my-1 text-base">Real Donations</p>
+          <p className="opacity-70 my-2 text-lg">Real creatures. Real competition. Real donations.</p>
         </header>
 
         <WalletStrip />
