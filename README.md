@@ -6,7 +6,7 @@ Clawd Search is an on-chain king-of-the-hill tournament where the community
 crowns iNaturalist lobster observations as champions of three absurd
 categories — and burns CLAWD to do it.
 
-**Live URL:** https://bafybeih45j4txtw6ni7snxyemcyx5yqtfcv6cuvlpcqxobbumpdtd73iyi.ipfs.community.bgipfs.com/
+**Live URL:** https://bafybeicrfbcay3afkl557pbuhkzdovmeecilg5jfqw7lwavein5cagkrdm.ipfs.community.bgipfs.com/
 - **Chain:** Base (8453)
 - **Contract:** [`0x1C67563F968256778847407583d9E6aBe1e263e7`](https://basescan.org/address/0x1C67563F968256778847407583d9E6aBe1e263e7)
 - **CLAWD token:** [`0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07`](https://basescan.org/token/0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07)

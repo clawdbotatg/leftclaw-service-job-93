@@ -1,3 +1,9 @@
+# Feature Plan — Job #146: Creature Feature Phase 2 (Six Active Crowns + Dynamic Categories)
+
+---
+
+_Phase 1 plan below for reference (Job 144):_
+
 # Feature Plan — Job 144: Creature Feature Visual + Identity Reset (Phase 1)
 
 ## Mode
@@ -36,9 +42,44 @@ leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
 - Placeholder cards look intentional (styled, slightly muted, badge)
 - Mobile: existing responsive classes are already touch-friendly
 
-## Files changed
+## Files changed (Phase 1)
 - packages/nextjs/app/layout.tsx
 - packages/nextjs/app/icon.svg
 - packages/nextjs/app/page.tsx
 - packages/nextjs/components/Header.tsx
 - packages/nextjs/app/_components/ClawdSearchApp.tsx
+
+---
+
+# Phase 2 Plan — Job #146
+
+## Contract changes (ClawdSearch.sol)
+- Remove `enum Category`; add `CategoryData` struct + `mapping(uint256 => CategoryData)`
+- Rename old `categories` mapping → `categoryStates`
+- Add `nextCategoryId` counter
+- Re-key all per-category storage with `uint256 categoryId`
+- Constructor seeds 6 categories via `_seedCategory(name, taxonId)`
+- `addCategory(string, uint32) external onlyOwner returns (uint256)` + `setCategoryActive`
+- All user functions take `uint256 categoryId`; events emit `uint256 indexed categoryId`
+- New events: CategoryAdded, CategorySetActive
+
+## Category IDs (seed order)
+- 0: Most Pudgy Penguin  taxon 3956
+- 1: Most Dapper Lobster taxon 47764
+- 2: Most Pepe Frog      taxon 20979
+- 3: Cutest              taxon 1
+- 4: Best Camouflage     taxon 1
+- 5: Best Eyes           taxon 1
+
+## Frontend changes
+- Replace Category enum + CATEGORY_META with CATEGORY_CONFIG[6]
+- `fetchCreaturePage(taxonId, page)`: per_page=200, paginated
+- ActionModal: taxonId prop; Load More; direct obs ID input
+- Homepage: 3×2 grid, all 6 active cards, no placeholders
+- Hall of Fame: per category (categoryId 0-5)
+
+## Files to modify
+- packages/foundry/contracts/ClawdSearch.sol (full rewrite)
+- packages/foundry/test/ClawdSearch.t.sol (update all enum refs)
+- packages/nextjs/contracts/deployedContracts.ts (auto-regen after deploy)
+- packages/nextjs/app/_components/ClawdSearchApp.tsx (full rewrite of logic layer)

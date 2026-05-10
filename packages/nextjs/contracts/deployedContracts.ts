@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     ClawdSearch: {
-      address: "0x1c67563f968256778847407583d9e6abe1e263e7",
+      address: "0x352f69d8225338b89c19b6877ae1a29b6fc8756f",
       abi: [
         {
           type: "constructor",
@@ -81,12 +81,94 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "categories",
+          name: "addCategory",
+          inputs: [
+            {
+              name: "name",
+              type: "string",
+              internalType: "string",
+            },
+            {
+              name: "taxonId",
+              type: "uint32",
+              internalType: "uint32",
+            },
+          ],
+          outputs: [
+            {
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "categoryChampionWins",
           inputs: [
             {
               name: "",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "categoryData",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "name",
+              type: "string",
+              internalType: "string",
+            },
+            {
+              name: "taxonId",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "active",
+              type: "bool",
+              internalType: "bool",
+            },
+            {
+              name: "createdAt",
+              type: "uint64",
+              internalType: "uint64",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "categoryStates",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           outputs: [
@@ -145,36 +227,12 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "categoryChampionWins",
-          inputs: [
-            {
-              name: "",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
-            },
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
           name: "challenge",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
             },
             {
               name: "observationId",
@@ -190,9 +248,9 @@ const deployedContracts = {
           name: "challengeDeadline",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           outputs: [
@@ -222,9 +280,9 @@ const deployedContracts = {
           name: "getCategory",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           outputs: [
@@ -290,12 +348,53 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "getCategoryData",
+          inputs: [
+            {
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "tuple",
+              internalType: "struct ClawdSearch.CategoryData",
+              components: [
+                {
+                  name: "name",
+                  type: "string",
+                  internalType: "string",
+                },
+                {
+                  name: "taxonId",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "active",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "createdAt",
+                  type: "uint64",
+                  internalType: "uint64",
+                },
+              ],
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "hasLostInCategory",
           inputs: [
             {
               name: "",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              type: "uint256",
+              internalType: "uint256",
             },
             {
               name: "",
@@ -318,8 +417,8 @@ const deployedContracts = {
           inputs: [
             {
               name: "",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              type: "uint256",
+              internalType: "uint256",
             },
             {
               name: "",
@@ -346,9 +445,9 @@ const deployedContracts = {
           name: "isChallengeActive",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           outputs: [
@@ -356,6 +455,19 @@ const deployedContracts = {
               name: "",
               type: "bool",
               internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "nextCategoryId",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           stateMutability: "view",
@@ -398,9 +510,27 @@ const deployedContracts = {
           name: "resolve",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "setCategoryActive",
+          inputs: [
+            {
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "active",
+              type: "bool",
+              internalType: "bool",
             },
           ],
           outputs: [],
@@ -447,9 +577,9 @@ const deployedContracts = {
           name: "submit",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
             },
             {
               name: "observationId",
@@ -533,9 +663,9 @@ const deployedContracts = {
           name: "vote",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
-              internalType: "enum ClawdSearch.Category",
+              name: "categoryId",
+              type: "uint256",
+              internalType: "uint256",
             },
             {
               name: "forChallenger",
@@ -561,13 +691,57 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "CategoryAdded",
+          inputs: [
+            {
+              name: "categoryId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "name",
+              type: "string",
+              indexed: false,
+              internalType: "string",
+            },
+            {
+              name: "taxonId",
+              type: "uint32",
+              indexed: false,
+              internalType: "uint32",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "CategorySetActive",
+          inputs: [
+            {
+              name: "categoryId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "active",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "ChallengeResolved",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
+              name: "categoryId",
+              type: "uint256",
               indexed: true,
-              internalType: "enum ClawdSearch.Category",
+              internalType: "uint256",
             },
             {
               name: "winnerObsId",
@@ -601,10 +775,10 @@ const deployedContracts = {
           name: "ChallengeStarted",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
+              name: "categoryId",
+              type: "uint256",
               indexed: true,
-              internalType: "enum ClawdSearch.Category",
+              internalType: "uint256",
             },
             {
               name: "challengerObsId",
@@ -626,10 +800,10 @@ const deployedContracts = {
           name: "ChampionCrowned",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
+              name: "categoryId",
+              type: "uint256",
               indexed: true,
-              internalType: "enum ClawdSearch.Category",
+              internalType: "uint256",
             },
             {
               name: "observationId",
@@ -727,10 +901,10 @@ const deployedContracts = {
           name: "VoteCast",
           inputs: [
             {
-              name: "category",
-              type: "uint8",
+              name: "categoryId",
+              type: "uint256",
               indexed: true,
-              internalType: "enum ClawdSearch.Category",
+              internalType: "uint256",
             },
             {
               name: "voter",
@@ -759,7 +933,17 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "CategoryDoesNotExist",
+          inputs: [],
+        },
+        {
+          type: "error",
           name: "CategoryHasNoChampion",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "CategoryNotActive",
           inputs: [],
         },
         {
@@ -852,7 +1036,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 45623552,
+      deployedOnBlock: 45795366,
     },
   },
 } as const;

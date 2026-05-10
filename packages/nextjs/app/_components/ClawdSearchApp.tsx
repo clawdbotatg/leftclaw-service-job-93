@@ -30,46 +30,39 @@ const VOTE_PRICE = 100n * 10n ** 18n;
 
 const CHALLENGE_DURATION = 48n * 60n * 60n; // seconds
 
-enum Category {
-  WouldWinInAFight = 0,
-  Cutest = 1,
-  LooksMostLikeCLAWDMascot = 2,
-}
-
-const CATEGORY_META: Record<Category, { title: string; emoji: string; tooltip: string; tagline: string }> = {
-  [Category.WouldWinInAFight]: {
-    title: "Would Win In A Fight",
-    emoji: "🥊",
-    tooltip: "The toughest creature — judged by the community",
-    tagline: "Pure tournament energy.",
+// Six active categories — seeded in the constructor (phase 2 contract).
+// id matches the on-chain categoryId (nextCategoryId order: 0-5).
+const CATEGORY_CONFIG = [
+  {
+    id: 0,
+    title: "Most Pudgy Penguin",
+    emoji: "🐧",
+    tagline: "Round. Waddly. Undeniable.",
+    taxonId: 3956,
+    hint: "Penguins only",
   },
-  [Category.Cutest]: {
-    title: "Cutest",
-    emoji: "🥺",
-    tooltip: "The most adorable creature — judged by the community",
-    tagline: "Soft. Smol. Irresistible.",
-  },
-  [Category.LooksMostLikeCLAWDMascot]: {
+  {
+    id: 1,
     title: "Most Dapper Lobster",
     emoji: "🦞",
-    tooltip: "The creature that most resembles the CLAWD mascot",
     tagline: "Anthropic-y. Scarlet. Pixel-poet.",
+    taxonId: 47764,
+    hint: "Lobsters only",
   },
-};
+  {
+    id: 2,
+    title: "Most Pepe Frog",
+    emoji: "🐸",
+    tagline: "Kek energy. Community decides.",
+    taxonId: 20979,
+    hint: "Frogs only",
+  },
+  { id: 3, title: "Cutest", emoji: "🥺", tagline: "Soft. Smol. Irresistible.", taxonId: 1, hint: null },
+  { id: 4, title: "Best Camouflage", emoji: "🦎", tagline: "The master of disguise.", taxonId: 1, hint: null },
+  { id: 5, title: "Best Eyes", emoji: "👁️", tagline: "The gaze that holds the crown.", taxonId: 1, hint: null },
+] as const;
 
-// Only these two categories are surfaced in the UI. WouldWinInAFight is
-// retired for tone reasons; the on-chain enum still exists but is not rendered.
-const ACTIVE_CATEGORIES: Category[] = [Category.Cutest, Category.LooksMostLikeCLAWDMascot];
-
-// Placeholder cards shown in the grid with "Coming Soon" badges.
-// Future Feature jobs will wire these to real on-chain Crowns — to add one,
-// move it from here to ACTIVE_CATEGORIES and pass the Category enum value.
-const PLACEHOLDER_CARDS: { title: string; emoji: string; tagline: string }[] = [
-  { title: "Most Pepe Frog", emoji: "🐸", tagline: "Kek energy. Community decides." },
-  { title: "Most Pudgy Penguin", emoji: "🐧", tagline: "Round. Waddly. Undeniable." },
-  { title: "Best Bug", emoji: "🐛", tagline: "Six legs, zero chill." },
-  { title: "Best Eyes", emoji: "👁️", tagline: "The gaze that holds the crown." },
-];
+type CategoryConfig = (typeof CATEGORY_CONFIG)[number];
 
 // ----------------------------------------------------------------------------
 // iNaturalist
@@ -88,8 +81,14 @@ type INatObservation = {
   photoUrl: string | null;
 };
 
-const PHOTO_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const LIST_CACHE_TTL_MS = 7 * 60 * 1000; // 7 minutes
+type CreaturePageResult = {
+  list: INatObservation[];
+  rawCount: number;
+};
+
+const CREATURE_PAGE_SIZE = 200;
+const PHOTO_CACHE_TTL_MS = 60 * 60 * 1000;
+const LIST_CACHE_TTL_MS = 7 * 60 * 1000;
 const ALLOWED_PHOTO_HOST = "inaturalist-open-data.s3.amazonaws.com";
 
 function isAllowedPhotoUrl(url: string | null | undefined): boolean {
@@ -162,19 +161,23 @@ async function fetchObservation(obsId: bigint | number): Promise<INatObservation
   }
 }
 
-async function fetchCreatureList(): Promise<INatObservation[]> {
-  const cacheKey = "clawd:creatures:Animalia";
-  const cached = lsGet<INatObservation[]>(cacheKey);
-  if (cached && Date.now() - cached.storedAt < LIST_CACHE_TTL_MS) {
-    return cached.value;
+async function fetchCreaturePage(taxonId: number, page: number): Promise<CreaturePageResult> {
+  const cacheKey = `clawd:creatures:taxon${taxonId}:page${page}`;
+  // Only cache page 1 in localStorage.
+  if (page === 1) {
+    const cached = lsGet<CreaturePageResult>(cacheKey);
+    if (cached && Date.now() - cached.storedAt < LIST_CACHE_TTL_MS) {
+      return cached.value;
+    }
   }
   try {
     const res = await fetch(
-      "https://api.inaturalist.org/v1/observations?taxon_id=1&photos=true&per_page=30&order=desc&order_by=observed_on&quality_grade=research",
+      `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&photos=true&per_page=${CREATURE_PAGE_SIZE}&page=${page}&order=desc&order_by=observed_on&quality_grade=research`,
     );
-    if (!res.ok) return [];
+    if (!res.ok) return { list: [], rawCount: 0 };
     const data = await res.json();
-    const list: INatObservation[] = (data.results ?? [])
+    const rawResults = (data.results ?? []) as any[];
+    const list: INatObservation[] = rawResults
       .map((r: any) => {
         const photos = r.photos ?? [];
         const photoUrl = upsizePhotoUrl(photos[0]?.url ?? null);
@@ -187,10 +190,13 @@ async function fetchCreatureList(): Promise<INatObservation[]> {
         };
       })
       .filter((o: INatObservation) => isAllowedPhotoUrl(o.photoUrl));
-    lsSet(cacheKey, list);
-    return list;
+    const result: CreaturePageResult = { list, rawCount: rawResults.length };
+    if (page === 1) {
+      lsSet(cacheKey, result);
+    }
+    return result;
   } catch {
-    return [];
+    return { list: [], rawCount: 0 };
   }
 }
 
@@ -323,7 +329,7 @@ function CreaturePhoto({ obsId, size = "h-40" }: { obsId: bigint; size?: string 
 }
 
 // ----------------------------------------------------------------------------
-// Modal — Submit / Challenge
+// Modal — Submit / Challenge (with per_page=200, Load More, direct obs ID)
 // ----------------------------------------------------------------------------
 
 type ModalKind = "submit" | "challenge";
@@ -332,13 +338,17 @@ function ActionModal({
   open,
   onClose,
   kind,
-  category,
+  categoryId,
+  taxonId,
+  categoryTitle,
   refetchCategory,
 }: {
   open: boolean;
   onClose: () => void;
   kind: ModalKind;
-  category: Category;
+  categoryId: number;
+  taxonId: number;
+  categoryTitle: string;
   refetchCategory: () => void;
 }) {
   const { address: account } = useAccount();
@@ -348,21 +358,81 @@ function ActionModal({
   const [list, setList] = useState<INatObservation[]>([]);
   const [listLoading, setListLoading] = useState<boolean>(false);
   const [picked, setPicked] = useState<INatObservation | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [obsInput, setObsInput] = useState<string>("");
+  const [obsInputError, setObsInputError] = useState<string | null>(null);
+  const [obsInputLoading, setObsInputLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (!open) return;
     setListLoading(true);
-    fetchCreatureList().then(l => {
+    setCurrentPage(1);
+    setHasMore(true);
+    fetchCreaturePage(taxonId, 1).then(({ list: l, rawCount }) => {
       setList(l);
+      setHasMore(rawCount >= CREATURE_PAGE_SIZE);
       setListLoading(false);
     });
-  }, [open]);
+  }, [open, taxonId]);
 
   useEffect(() => {
     if (!open) {
       setPicked(null);
+      setObsInput("");
+      setObsInputError(null);
+      setObsInputLoading(false);
     }
   }, [open]);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const next = currentPage + 1;
+    const { list: more, rawCount } = await fetchCreaturePage(taxonId, next);
+    setList(prev => {
+      const seen = new Set(prev.map(o => o.id));
+      const merged = [...prev];
+      for (const o of more) {
+        if (!seen.has(o.id)) merged.push(o);
+      }
+      return merged;
+    });
+    setCurrentPage(next);
+    setHasMore(rawCount >= CREATURE_PAGE_SIZE);
+    setLoadingMore(false);
+  };
+
+  const handleObsInputSubmit = async () => {
+    const trimmed = obsInput.trim();
+    if (!trimmed) {
+      setObsInputError("Couldn't parse — try a numeric ID or full iNat URL.");
+      return;
+    }
+    let id: string | null = null;
+    if (/^\d+$/.test(trimmed)) {
+      id = trimmed;
+    } else {
+      const urlMatch = trimmed.match(/inaturalist\.org\/observations\/(\d+)/i);
+      if (urlMatch) id = urlMatch[1];
+    }
+    if (!id) {
+      setObsInputError("Couldn't parse — try a numeric ID or full iNat URL.");
+      return;
+    }
+    setObsInputError(null);
+    setObsInputLoading(true);
+    const obs = await fetchObservation(BigInt(id));
+    setObsInputLoading(false);
+    if (!obs || !obs.photoUrl) {
+      setObsInputError(
+        "That observation isn't available, has no photo, or its photo isn't on iNaturalist's open data CDN. Try another.",
+      );
+      return;
+    }
+    setPicked(obs);
+  };
 
   const balanceRead = useReadContract({
     chainId: CHAIN_ID,
@@ -430,7 +500,7 @@ function ActionModal({
       openWalletOnMobile();
       await writeSearch({
         functionName: fnName,
-        args: [category, BigInt(picked.id)],
+        args: [BigInt(categoryId), BigInt(picked.id)],
       });
       notification.success(
         kind === "submit" ? "Champion crowned! 👑" : "Challenge opened — voting is live for 48 hours.",
@@ -444,7 +514,6 @@ function ActionModal({
 
   if (!open) return null;
 
-  const meta = CATEGORY_META[category];
   const costLabel = kind === "submit" ? "1,000 CLAWD" : "100 CLAWD";
 
   return (
@@ -453,7 +522,7 @@ function ActionModal({
         <div className="flex items-start justify-between mb-2">
           <div>
             <h3 className="font-bold text-lg my-0">
-              {kind === "submit" ? "Submit Champion" : "Challenge Champion"} · {meta.emoji} {meta.title}
+              {kind === "submit" ? "Submit Champion" : "Challenge Champion"} · {categoryTitle}
             </h3>
             <p className="text-sm opacity-70 mt-1 mb-0">
               Pick a creature from iNaturalist (research grade, real photos only).
@@ -466,6 +535,30 @@ function ActionModal({
 
         {!picked ? (
           <>
+            {/* Direct observation ID input */}
+            <div className="flex gap-2 my-3">
+              <input
+                type="text"
+                className="input input-bordered input-sm flex-1"
+                placeholder="Paste iNaturalist URL or numeric observation ID…"
+                value={obsInput}
+                onChange={e => {
+                  setObsInput(e.target.value);
+                  if (obsInputError) setObsInputError(null);
+                }}
+                disabled={obsInputLoading}
+                onKeyDown={e => e.key === "Enter" && handleObsInputSubmit()}
+              />
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={handleObsInputSubmit}
+                disabled={obsInputLoading || obsInput.trim().length === 0}
+              >
+                {obsInputLoading ? <span className="loading loading-spinner loading-xs" /> : "Go"}
+              </button>
+            </div>
+            {obsInputError && <p className="text-xs text-error mt-1 mb-0">{obsInputError}</p>}
+
             <div className="flex justify-between items-center my-3">
               <button
                 className="btn btn-sm btn-secondary"
@@ -491,27 +584,43 @@ function ActionModal({
                 <span>Couldn&apos;t reach iNaturalist. Try again in a moment.</span>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-2">
-                {list.map(o => (
-                  <button
-                    key={o.id}
-                    className="lobster-card card bg-base-200 hover:bg-base-300 text-left p-2 cursor-pointer"
-                    onClick={() => setPicked(o)}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={o.photoUrl ?? ""}
-                      alt={o.speciesGuess}
-                      className="obs-thumb rounded-md w-full"
-                      loading="lazy"
-                    />
-                    <div className="text-xs mt-1 leading-tight">
-                      <div className="font-semibold truncate">{o.speciesGuess}</div>
-                      <div className="opacity-60 truncate">{o.placeGuess}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-2">
+                  {list.map(o => (
+                    <button
+                      key={o.id}
+                      className="lobster-card card bg-base-200 hover:bg-base-300 text-left p-2 cursor-pointer"
+                      onClick={() => setPicked(o)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={o.photoUrl ?? ""}
+                        alt={o.speciesGuess}
+                        className="obs-thumb rounded-md w-full"
+                        loading="lazy"
+                      />
+                      <div className="text-xs mt-1 leading-tight">
+                        <div className="font-semibold truncate">{o.speciesGuess}</div>
+                        <div className="opacity-60 truncate">{o.placeGuess}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {hasMore && (
+                  <div className="flex justify-center mt-3">
+                    <button className="btn btn-sm btn-outline" onClick={loadMore} disabled={loadingMore}>
+                      {loadingMore ? (
+                        <>
+                          <span className="loading loading-spinner loading-xs" />
+                          Loading More…
+                        </>
+                      ) : (
+                        "Load More"
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </>
         ) : (
@@ -674,14 +783,14 @@ function ConfirmPanel({
 // ----------------------------------------------------------------------------
 
 function VoteButton({
-  category,
+  categoryId,
   forChallenger,
   onVoted,
   hasUserVoted,
   challengeOpen,
   label,
 }: {
-  category: Category;
+  categoryId: number;
   forChallenger: boolean;
   onVoted: () => void;
   hasUserVoted: boolean;
@@ -751,7 +860,7 @@ function VoteButton({
       openWalletOnMobile();
       await writeSearch({
         functionName: "vote",
-        args: [category, forChallenger],
+        args: [BigInt(categoryId), forChallenger],
       });
       notification.success("Vote cast!");
       onVoted();
@@ -793,13 +902,13 @@ function VoteButton({
 // Resolve
 // ----------------------------------------------------------------------------
 
-function ResolveButton({ category, onResolved }: { category: Category; onResolved: () => void }) {
+function ResolveButton({ categoryId, onResolved }: { categoryId: number; onResolved: () => void }) {
   const { writeContractAsync, isPending } = useScaffoldWriteContract({ contractName: "ClawdSearch" });
   const { openWalletOnMobile } = useWriteAndOpen();
   const handle = async () => {
     try {
       openWalletOnMobile();
-      await writeContractAsync({ functionName: "resolve", args: [category] });
+      await writeContractAsync({ functionName: "resolve", args: [BigInt(categoryId)] });
       notification.success("Resolved!");
       onResolved();
     } catch (e) {
@@ -824,16 +933,15 @@ function ResolveButton({ category, onResolved }: { category: Category; onResolve
 // Category Card (active, wired to contract)
 // ----------------------------------------------------------------------------
 
-function CategoryCard({ category }: { category: Category }) {
-  const meta = CATEGORY_META[category];
+function CategoryCard({ config }: { config: CategoryConfig }) {
   const now = useNow();
   const { address: account, chain } = useAccount();
   const onWrongNetwork = !!chain && chain.id !== CHAIN_ID;
 
   const { data: rawCategory, refetch: refetchCategory } = useScaffoldReadContract({
     contractName: "ClawdSearch",
-    functionName: "categories",
-    args: [category as unknown as undefined],
+    functionName: "getCategory",
+    args: [BigInt(config.id) as unknown as undefined],
   } as any);
   const cat = decodeCategory(rawCategory as readonly unknown[] | undefined);
 
@@ -841,14 +949,18 @@ function CategoryCard({ category }: { category: Category }) {
   const { data: championWins } = useScaffoldReadContract({
     contractName: "ClawdSearch",
     functionName: "categoryChampionWins",
-    args: [category as unknown as undefined, championObsId as unknown as undefined],
+    args: [BigInt(config.id) as unknown as undefined, championObsId as unknown as undefined],
   } as any);
 
   const challengeRound = cat?.challengeRound ?? 0n;
   const { data: hasUserVoted, refetch: refetchHasVoted } = useScaffoldReadContract({
     contractName: "ClawdSearch",
     functionName: "hasVoted",
-    args: [category as unknown as undefined, challengeRound as unknown as undefined, account as unknown as undefined],
+    args: [
+      BigInt(config.id) as unknown as undefined,
+      challengeRound as unknown as undefined,
+      account as unknown as undefined,
+    ],
   } as any);
 
   const [modal, setModal] = useState<ModalKind | null>(null);
@@ -873,14 +985,12 @@ function CategoryCard({ category }: { category: Category }) {
       <div className="card-body p-5">
         <div className="flex items-start justify-between">
           <h2 className="card-title text-base sm:text-lg my-0">
-            <span className="text-2xl">{meta.emoji}</span>
-            <span>{meta.title}</span>
+            <span className="text-2xl">{config.emoji}</span>
+            <span>{config.title}</span>
           </h2>
-          <div className="tooltip tooltip-left" data-tip={meta.tooltip}>
-            <span className="cursor-help text-sm opacity-60">ⓘ</span>
-          </div>
         </div>
-        <p className="text-xs opacity-70 my-1">{meta.tagline}</p>
+        {config.hint && <p className="text-[10px] opacity-50 my-0 -mt-1 ml-9">{config.hint}</p>}
+        <p className="text-xs opacity-70 my-1">{config.tagline}</p>
 
         {noChampion ? (
           <div className="flex flex-col items-center text-center gap-3 py-4">
@@ -896,7 +1006,7 @@ function CategoryCard({ category }: { category: Category }) {
           </div>
         ) : challengerActive ? (
           <ChallengeView
-            category={category}
+            categoryId={config.id}
             cat={cat!}
             championWins={(championWins as bigint | undefined) ?? 0n}
             challengeRemainingSec={challengeRemainingSec}
@@ -923,36 +1033,13 @@ function CategoryCard({ category }: { category: Category }) {
           <ActionModal
             open
             kind={modal}
-            category={category}
+            categoryId={config.id}
+            taxonId={config.taxonId}
+            categoryTitle={config.title}
             onClose={() => setModal(null)}
             refetchCategory={refetchAll}
           />
         )}
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Placeholder Card (coming soon, no contract calls)
-// ----------------------------------------------------------------------------
-
-function PlaceholderCard({ title, emoji, tagline }: { title: string; emoji: string; tagline: string }) {
-  return (
-    <div className="card bg-base-100 shadow-md border border-base-300 border-dashed flex flex-col opacity-70">
-      <div className="card-body p-5 flex flex-col gap-2">
-        <div className="flex items-start justify-between">
-          <h2 className="card-title text-base sm:text-lg my-0">
-            <span className="text-2xl">{emoji}</span>
-            <span>{title}</span>
-          </h2>
-          <span className="badge badge-outline badge-sm text-xs shrink-0">Coming Soon</span>
-        </div>
-        <p className="text-xs opacity-60 my-1">{tagline}</p>
-        <div className="flex flex-col items-center text-center gap-3 py-4">
-          <div className="text-4xl opacity-30">👑</div>
-          <p className="text-sm opacity-50 my-0">This crown is on the horizon.</p>
-        </div>
       </div>
     </div>
   );
@@ -1019,7 +1106,7 @@ function ChampionView({
 }
 
 function ChallengeView({
-  category,
+  categoryId,
   cat,
   championWins,
   challengeRemainingSec,
@@ -1029,7 +1116,7 @@ function ChallengeView({
   account,
   refetchAll,
 }: {
-  category: Category;
+  categoryId: number;
   cat: CategoryState;
   championWins: bigint;
   challengeRemainingSec: number;
@@ -1073,7 +1160,7 @@ function ChallengeView({
           <div className="alert alert-info py-2 text-xs">
             <span>Challenge window closed. Anyone can resolve.</span>
           </div>
-          <ResolveButton category={category} onResolved={refetchAll} />
+          <ResolveButton categoryId={categoryId} onResolved={refetchAll} />
         </>
       ) : (
         <>
@@ -1082,7 +1169,7 @@ function ChallengeView({
           </div>
           <div className="flex gap-2">
             <VoteButton
-              category={category}
+              categoryId={categoryId}
               forChallenger={false}
               onVoted={refetchAll}
               hasUserVoted={hasUserVoted}
@@ -1090,7 +1177,7 @@ function ChallengeView({
               label="🛡️ Champion"
             />
             <VoteButton
-              category={category}
+              categoryId={categoryId}
               forChallenger={true}
               onVoted={refetchAll}
               hasUserVoted={hasUserVoted}
@@ -1150,21 +1237,25 @@ function HallOfFame() {
   const { data: events, isLoading } = useScaffoldEventHistory({
     contractName: "ClawdSearch",
     eventName: "ChampionCrowned",
-    fromBlock: 45623552n,
+    fromBlock: 30000000n,
     watch: true,
   });
 
   const byCategory = useMemo(() => {
-    const map: Record<number, { obsId: bigint; submitter: `0x${string}` }[]> = { 0: [], 1: [], 2: [] };
+    const map: Record<number, { obsId: bigint; submitter: `0x${string}` }[]> = {};
+    for (const cfg of CATEGORY_CONFIG) {
+      map[cfg.id] = [];
+    }
     if (!events) return map;
     for (const ev of events as any[]) {
       const args = ev.args ?? {};
-      const cat = Number(args.category ?? 0);
+      const catId = Number(args.categoryId ?? 0);
       const obsId = (args.observationId ?? 0n) as bigint;
       const submitter = (args.submitter ?? "0x0000000000000000000000000000000000000000") as `0x${string}`;
-      const existing = map[cat]?.find(e => e.obsId === obsId);
-      if (!existing && map[cat]) {
-        map[cat].push({ obsId, submitter });
+      if (!map[catId]) map[catId] = [];
+      const existing = map[catId].find(e => e.obsId === obsId);
+      if (!existing) {
+        map[catId].push({ obsId, submitter });
       }
     }
     return map;
@@ -1194,8 +1285,8 @@ function HallOfFame() {
       <section className="mt-12">
         <h2 className="text-xl font-bold mb-4">Hall of Fame</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {ACTIVE_CATEGORIES.map(i => (
-            <div key={i} className="h-40 bg-base-200 rounded-lg animate-pulse" />
+          {CATEGORY_CONFIG.map(cfg => (
+            <div key={cfg.id} className="h-40 bg-base-200 rounded-lg animate-pulse" />
           ))}
         </div>
       </section>
@@ -1206,8 +1297,8 @@ function HallOfFame() {
     <section className="mt-12">
       <h2 className="text-xl font-bold mb-4">Hall of Fame</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {ACTIVE_CATEGORIES.map(cat => (
-          <HallOfFameLane key={cat} category={cat} entries={byCategory[cat] ?? []} />
+        {CATEGORY_CONFIG.map(cfg => (
+          <HallOfFameLane key={cfg.id} config={cfg} entries={byCategory[cfg.id] ?? []} />
         ))}
       </div>
       {topSubmitters.length > 0 && (
@@ -1235,27 +1326,26 @@ function HallOfFame() {
 }
 
 function HallOfFameLane({
-  category,
+  config,
   entries,
 }: {
-  category: Category;
+  config: CategoryConfig;
   entries: { obsId: bigint; submitter: `0x${string}` }[];
 }) {
-  const meta = CATEGORY_META[category];
   const top5 = entries.slice(0, 5);
 
   return (
     <div className="card bg-base-100 border border-base-300">
       <div className="card-body p-5">
         <h3 className="font-semibold my-0">
-          {meta.emoji} {meta.title}
+          {config.emoji} {config.title}
         </h3>
         {top5.length === 0 ? (
           <p className="text-sm opacity-60 my-2">No champions yet — be the first.</p>
         ) : (
           <ul className="flex flex-col gap-3 mt-2">
             {top5.map((e, i) => (
-              <HallOfFameEntry key={e.obsId.toString()} category={category} entry={e} rank={i + 1} />
+              <HallOfFameEntry key={e.obsId.toString()} categoryId={config.id} entry={e} rank={i + 1} />
             ))}
           </ul>
         )}
@@ -1265,11 +1355,11 @@ function HallOfFameLane({
 }
 
 function HallOfFameEntry({
-  category,
+  categoryId,
   entry,
   rank,
 }: {
-  category: Category;
+  categoryId: number;
   entry: { obsId: bigint; submitter: `0x${string}` };
   rank: number;
 }) {
@@ -1277,7 +1367,7 @@ function HallOfFameEntry({
   const { data: wins } = useScaffoldReadContract({
     contractName: "ClawdSearch",
     functionName: "categoryChampionWins",
-    args: [category as unknown as undefined, entry.obsId as unknown as undefined],
+    args: [BigInt(categoryId) as unknown as undefined, entry.obsId as unknown as undefined],
   } as any);
 
   return (
@@ -1397,11 +1487,8 @@ export default function ClawdSearchApp() {
         <section>
           <h2 className="text-xl font-bold mb-3">The Crowns</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {ACTIVE_CATEGORIES.map(c => (
-              <CategoryCard key={c} category={c} />
-            ))}
-            {PLACEHOLDER_CARDS.map(card => (
-              <PlaceholderCard key={card.title} title={card.title} emoji={card.emoji} tagline={card.tagline} />
+            {CATEGORY_CONFIG.map(cfg => (
+              <CategoryCard key={cfg.id} config={cfg} />
             ))}
           </div>
         </section>
@@ -1413,7 +1500,7 @@ export default function ClawdSearchApp() {
             <h3 className="font-semibold my-0">Contracts</h3>
             <div className="flex flex-col gap-1 mt-2">
               <div className="flex items-center gap-2">
-                <span className="opacity-60 w-32">Clawd Search:</span>
+                <span className="opacity-60 w-32">Creature Feature:</span>
                 <AddressComp address={CLAWD_SEARCH_ADDRESS} format="short" size="sm" chain={base} />
               </div>
               <div className="flex items-center gap-2">
