@@ -7,25 +7,82 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+// ---------------------------------------------------------------------------
+// External interfaces — minimal, inlined to avoid dependency management
+// ---------------------------------------------------------------------------
+
+interface ISwapRouter {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+
+    struct ExactInputParams {
+        bytes path;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+    }
+
+    function exactInput(ExactInputParams calldata params) external payable returns (uint256 amountOut);
+}
+
+interface IQuoterV2 {
+    struct QuoteExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint24 fee;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function quoteExactInputSingle(QuoteExactInputSingleParams memory params)
+        external
+        returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
+
+    function quoteExactInput(bytes memory path, uint256 amountIn)
+        external
+        returns (
+            uint256 amountOut,
+            uint160[] memory sqrtPriceX96AfterList,
+            uint32[] memory initializedTicksCrossedList,
+            uint256 gasEstimate
+        );
+}
+
+interface IEndaomentEntity {
+    function donate(uint256 amount) external;
+}
+
 /**
  * @title ClawdSearch
- * @notice On-chain "Creature Feature" tournament: anyone can submit a creature observation as the
- *         champion of a dynamic category, and any holder can challenge by paying CLAWD.
- *         Voters spend CLAWD to support either side. After 48h, the side with the most votes wins;
- *         ties go to the defender. Tokens are split 50/50 burn/treasury, with any odd-amount
- *         remainder going to the burn side.
+ * @notice On-chain "Creature Feature" tournament — Phase 3.
+ *         Every payment is split 80/10/10: 80% is swapped to USDC via Uniswap V3 and
+ *         donated to WWF via Endaoment; 10% is burned; 10% goes to the CLAWD builders fund.
  *
- * @dev    Phase 2: replaces the static Category enum with a dynamic mapping-based category system.
- *         All existing logic is preserved; the uint256 categoryId replaces the enum parameter.
- *         Six categories are seeded in the constructor; future categories can be added via
- *         `addCategory` without redeploying.
+ * @dev    Phase 2: dynamic categories (6 seeded in constructor).
+ *         Phase 3: replaces the 50/50 burn/treasury split with 80/10/10 three-way split
+ *         and adds Uniswap V3 charity routing + Endaoment donation.
  *
  *         CLAWD trust assumption: the hardcoded CLAWD token at
  *         `0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07` is treated as a vetted, standard
  *         OpenZeppelin-style ERC20 with no transfer hooks, no rebasing, no fee-on-transfer,
- *         and no callbacks into this contract during `transferFrom`. We additionally apply
- *         `nonReentrant` to all state-mutating user entry points (`submit`, `challenge`,
- *         `vote`, `resolve`) as belt-and-suspenders.
+ *         and no callbacks into this contract during `transferFrom`. `nonReentrant` applied
+ *         to all state-mutating user entry points as belt-and-suspenders.
+ *
+ *         Swap path: SINGLE_HOP (CLAWD→USDC) or TWO_HOP (CLAWD→WETH→USDC). Set in
+ *         constructor; owner can change via `setSwapPath`. Fee tiers tunable by owner.
+ *
+ *         Endaoment: charity portion swaps to USDC then calls `donate(amount)` on the
+ *         WWF_ENTITY. Both the swap and the donation are wrapped in try/catch — a failed
+ *         call strands CLAWD/USDC in this contract for owner rescue via `rescueToken`.
  */
 contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -39,11 +96,20 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
     uint256 public constant CHALLENGE_DURATION = 48 hours;
-
     uint256 public constant COOLDOWN = 1 hours;
 
+    // Charity infrastructure (Base mainnet)
+    address public constant WWF_ENTITY = 0x3c57365D198586d6Bc0e3e3f6b9a63E17425aC52;
+    address public constant UNISWAP_V3_ROUTER = 0x2626664c2603336E57B271c5C0b26F421741e481;
+    address public constant UNISWAP_V3_QUOTER = 0x61fFE014bA17989E743c5F6cB21bF9697530B21e;
+    address public constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address public constant WETH = 0x4200000000000000000000000000000000000006;
+
+    uint8 public constant SINGLE_HOP = 0;
+    uint8 public constant TWO_HOP = 1;
+
     // -----------------------------------------------------------------------
-    // Storage
+    // Storage — Phase 2 (tournament state, unchanged)
     // -----------------------------------------------------------------------
 
     address public treasury;
@@ -52,10 +118,8 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     uint256 public challengePrice = 100 * 1e18;
     uint256 public votePrice = 100 * 1e18;
 
-    /// @notice Total number of categories ever created (next ID to assign).
     uint256 public nextCategoryId;
 
-    /// @notice Metadata for each category (dynamic, owner-managed).
     struct CategoryData {
         string name;
         uint32 taxonId;
@@ -63,7 +127,6 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
         uint64 createdAt;
     }
 
-    /// @notice Per-category tournament state. Timestamps packed into uint64 for efficiency.
     struct CategoryState {
         uint256 championObsId;
         address championOwner;
@@ -83,25 +146,34 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
         uint256 totalReignSeconds;
     }
 
-    /// @notice Category metadata by categoryId.
     mapping(uint256 => CategoryData) public categoryData;
-
-    /// @notice Tournament state by categoryId.
     mapping(uint256 => CategoryState) public categoryStates;
-
-    /// @notice Total wins per (categoryId, observationId).
     mapping(uint256 => mapping(uint256 => uint256)) public categoryChampionWins;
-
-    /// @notice Has `voter` already voted in this (categoryId, challengeRound)?
     mapping(uint256 => mapping(uint64 => mapping(address => bool))) public hasVoted;
-
-    /// @notice An observation that lost in a category cannot be re-challenged in that same category.
     mapping(uint256 => mapping(uint256 => bool)) public hasLostInCategory;
-
     mapping(address => UserStats) public userStats;
 
     // -----------------------------------------------------------------------
-    // Events
+    // Storage — Phase 3 (charity routing)
+    // -----------------------------------------------------------------------
+
+    uint16 public splitCharityBps = 8000;
+    uint16 public splitBurnBps = 1000;
+    uint16 public splitTreasuryBps = 1000;
+    uint16 public slippageBps = 100;
+    uint8 public swapPath;
+
+    uint24 public singleHopFee = 10_000;
+    uint24 public twoHopFee1 = 10_000;
+    uint24 public twoHopFee2 = 500;
+
+    uint256 public totalCharityDonatedUsdc;
+    uint256 public totalBurned;
+    uint256 public totalTreasury;
+    uint256 public totalCreaturesSubmitted;
+
+    // -----------------------------------------------------------------------
+    // Events — Phase 2 (unchanged)
     // -----------------------------------------------------------------------
 
     event CategoryAdded(uint256 indexed categoryId, string name, uint32 taxonId);
@@ -120,7 +192,22 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     event PricesUpdated(uint256 submitPrice, uint256 challengePrice, uint256 votePrice);
 
     // -----------------------------------------------------------------------
-    // Custom errors
+    // Events — Phase 3 (new)
+    // -----------------------------------------------------------------------
+
+    event PaymentProcessed(
+        address indexed payer,
+        uint256 totalAmount,
+        uint256 burnAmount,
+        uint256 treasuryAmount,
+        uint256 charityAmount,
+        uint256 usdcDonated
+    );
+    event SplitUpdated(uint16 charity, uint16 burn, uint16 treasury);
+    event SwapPathUpdated(uint8 path);
+
+    // -----------------------------------------------------------------------
+    // Errors
     // -----------------------------------------------------------------------
 
     error InvalidObservation();
@@ -138,20 +225,24 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     error AlreadyVoted();
     error ZeroAddress();
     error OwnershipCannotBeRenounced();
+    error InvalidSplit();
+    error SlippageTooHigh();
 
     // -----------------------------------------------------------------------
     // Constructor
     // -----------------------------------------------------------------------
 
-    constructor(address initialOwner) Ownable(initialOwner) {
+    constructor(address initialOwner, uint8 _swapPath) Ownable(initialOwner) {
         if (initialOwner == address(0)) revert ZeroAddress();
         CLAWD = IERC20(0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07);
         treasury = 0x90eF2A9211A3E7CE788561E5af54C76B0Fa3aEd0;
+        swapPath = _swapPath;
 
         emit TreasuryUpdated(treasury);
         emit PricesUpdated(submitPrice, challengePrice, votePrice);
+        emit SplitUpdated(splitCharityBps, splitBurnBps, splitTreasuryBps);
+        emit SwapPathUpdated(swapPath);
 
-        // Seed 6 categories as specified by job #146.
         _seedCategory("Most Pudgy Penguin", 3956);
         _seedCategory("Most Dapper Lobster", 47764);
         _seedCategory("Most Pepe Frog", 20979);
@@ -176,6 +267,7 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
 
         unchecked {
             userStats[msg.sender].championsSubmitted += 1;
+            totalCreaturesSubmitted += 1;
         }
 
         _spendClawd(submitPrice);
@@ -295,7 +387,7 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     }
 
     // -----------------------------------------------------------------------
-    // Owner controls
+    // Owner controls — Phase 2 (unchanged)
     // -----------------------------------------------------------------------
 
     function addCategory(string calldata name, uint32 taxonId) external onlyOwner returns (uint256 categoryId) {
@@ -327,7 +419,41 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     }
 
     // -----------------------------------------------------------------------
-    // Views
+    // Owner controls — Phase 3 (new)
+    // -----------------------------------------------------------------------
+
+    function setSplit(uint16 charity, uint16 burn, uint16 treasury_) external onlyOwner {
+        if (uint256(charity) + uint256(burn) + uint256(treasury_) != 10_000) revert InvalidSplit();
+        splitCharityBps = charity;
+        splitBurnBps = burn;
+        splitTreasuryBps = treasury_;
+        emit SplitUpdated(charity, burn, treasury_);
+    }
+
+    function setSlippageBps(uint16 bps) external onlyOwner {
+        if (bps > 500) revert SlippageTooHigh();
+        slippageBps = bps;
+    }
+
+    function setSwapPath(uint8 path) external onlyOwner {
+        swapPath = path;
+        emit SwapPathUpdated(path);
+    }
+
+    function setFees(uint24 _singleHopFee, uint24 _twoHopFee1, uint24 _twoHopFee2) external onlyOwner {
+        singleHopFee = _singleHopFee;
+        twoHopFee1 = _twoHopFee1;
+        twoHopFee2 = _twoHopFee2;
+    }
+
+    /// @notice Owner rescue for stranded tokens (failed swaps or donations leave tokens here).
+    function rescueToken(address token, address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        IERC20(token).safeTransfer(to, amount);
+    }
+
+    // -----------------------------------------------------------------------
+    // Views — Phase 2 (unchanged)
     // -----------------------------------------------------------------------
 
     function getCategoryData(uint256 categoryId) external view returns (CategoryData memory) {
@@ -350,7 +476,7 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
     }
 
     // -----------------------------------------------------------------------
-    // Internal
+    // Internal — Phase 2 helpers (unchanged)
     // -----------------------------------------------------------------------
 
     function _seedCategory(string memory name, uint32 taxonId) internal {
@@ -371,13 +497,112 @@ contract ClawdSearch is Ownable2Step, ReentrancyGuard {
         if (!categoryData[categoryId].active) revert CategoryNotActive();
     }
 
+    // -----------------------------------------------------------------------
+    // Internal — Phase 3: charity routing
+    // -----------------------------------------------------------------------
+
     function _spendClawd(uint256 amount) internal {
         if (amount == 0) return;
-        uint256 treasuryAmount = amount / 2;
-        uint256 burnAmount = amount - treasuryAmount;
-        CLAWD.safeTransferFrom(msg.sender, BURN_ADDRESS, burnAmount);
-        if (treasuryAmount > 0) {
-            CLAWD.safeTransferFrom(msg.sender, treasury, treasuryAmount);
+
+        // Compute three portions; charity gets any rounding remainder so it is never shorted.
+        uint256 burnAmount = (amount * splitBurnBps) / 10_000;
+        uint256 treasuryAmount = (amount * splitTreasuryBps) / 10_000;
+        uint256 charityAmount = amount - burnAmount - treasuryAmount;
+
+        // Effects: update accumulators before any external calls.
+        totalBurned += burnAmount;
+        totalTreasury += treasuryAmount;
+
+        // Burn and treasury transfers directly from payer.
+        if (burnAmount > 0) CLAWD.safeTransferFrom(msg.sender, BURN_ADDRESS, burnAmount);
+        if (treasuryAmount > 0) CLAWD.safeTransferFrom(msg.sender, treasury, treasuryAmount);
+
+        // Charity routing: pull CLAWD → swap to USDC → donate via Endaoment.
+        uint256 usdcDonated = 0;
+        if (charityAmount > 0) {
+            CLAWD.safeTransferFrom(msg.sender, address(this), charityAmount);
+            usdcDonated = _swapAndDonate(charityAmount);
+        }
+
+        emit PaymentProcessed(msg.sender, amount, burnAmount, treasuryAmount, charityAmount, usdcDonated);
+    }
+
+    function _swapAndDonate(uint256 charityAmount) internal returns (uint256 usdcDonated) {
+        uint256 minOut = _getMinOut(charityAmount);
+
+        // Approve router to spend CLAWD held by this contract.
+        CLAWD.forceApprove(UNISWAP_V3_ROUTER, charityAmount);
+
+        uint256 received = 0;
+        if (swapPath == SINGLE_HOP) {
+            try ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: address(CLAWD),
+                    tokenOut: USDC,
+                    fee: singleHopFee,
+                    recipient: address(this),
+                    amountIn: charityAmount,
+                    amountOutMinimum: minOut,
+                    sqrtPriceLimitX96: 0
+                })
+            ) returns (uint256 out) {
+                received = out;
+            } catch {
+                // Reset allowance on failure; CLAWD stays in contract for rescue.
+                CLAWD.forceApprove(UNISWAP_V3_ROUTER, 0);
+            }
+        } else {
+            bytes memory path = abi.encodePacked(address(CLAWD), twoHopFee1, WETH, twoHopFee2, USDC);
+            try ISwapRouter(UNISWAP_V3_ROUTER).exactInput(
+                ISwapRouter.ExactInputParams({
+                    path: path,
+                    recipient: address(this),
+                    amountIn: charityAmount,
+                    amountOutMinimum: minOut
+                })
+            ) returns (uint256 out) {
+                received = out;
+            } catch {
+                CLAWD.forceApprove(UNISWAP_V3_ROUTER, 0);
+            }
+        }
+
+        if (received > 0) {
+            // Approve Endaoment entity for received USDC.
+            IERC20(USDC).forceApprove(WWF_ENTITY, received);
+            try IEndaomentEntity(WWF_ENTITY).donate(received) {
+                usdcDonated = received;
+                totalCharityDonatedUsdc += received;
+            } catch {
+                // Reset USDC allowance on failure; USDC stays in contract for rescue.
+                IERC20(USDC).forceApprove(WWF_ENTITY, 0);
+            }
+        }
+    }
+
+    function _getMinOut(uint256 clawd) internal returns (uint256 minOut) {
+        if (swapPath == SINGLE_HOP) {
+            try IQuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(
+                IQuoterV2.QuoteExactInputSingleParams({
+                    tokenIn: address(CLAWD),
+                    tokenOut: USDC,
+                    amountIn: clawd,
+                    fee: singleHopFee,
+                    sqrtPriceLimitX96: 0
+                })
+            ) returns (uint256 amountOut, uint160, uint32, uint256) {
+                minOut = (amountOut * (10_000 - slippageBps)) / 10_000;
+            } catch {
+                minOut = 0;
+            }
+        } else {
+            bytes memory path = abi.encodePacked(address(CLAWD), twoHopFee1, WETH, twoHopFee2, USDC);
+            try IQuoterV2(UNISWAP_V3_QUOTER).quoteExactInput(path, clawd)
+            returns (uint256 amountOut, uint160[] memory, uint32[] memory, uint256) {
+                minOut = (amountOut * (10_000 - slippageBps)) / 10_000;
+            } catch {
+                minOut = 0;
+            }
         }
     }
 }

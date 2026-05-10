@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     ClawdSearch: {
-      address: "0x352f69d8225338b89c19b6877ae1a29b6fc8756f",
+      address: "0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74",
       abi: [
         {
           type: "constructor",
@@ -16,6 +16,11 @@ const deployedContracts = {
               name: "initialOwner",
               type: "address",
               internalType: "address",
+            },
+            {
+              name: "_swapPath",
+              type: "uint8",
+              internalType: "uint8",
             },
           ],
           stateMutability: "nonpayable",
@@ -68,6 +73,97 @@ const deployedContracts = {
               name: "",
               type: "uint256",
               internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "SINGLE_HOP",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "TWO_HOP",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "UNISWAP_V3_QUOTER",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "UNISWAP_V3_ROUTER",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "USDC",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "WETH",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "WWF_ENTITY",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
             },
           ],
           stateMutability: "view",
@@ -507,6 +603,29 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "rescueToken",
+          inputs: [
+            {
+              name: "token",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "to",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "amount",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "resolve",
           inputs: [
             {
@@ -538,6 +657,29 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "setFees",
+          inputs: [
+            {
+              name: "_singleHopFee",
+              type: "uint24",
+              internalType: "uint24",
+            },
+            {
+              name: "_twoHopFee1",
+              type: "uint24",
+              internalType: "uint24",
+            },
+            {
+              name: "_twoHopFee2",
+              type: "uint24",
+              internalType: "uint24",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "setPrices",
           inputs: [
             {
@@ -561,6 +703,55 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "setSlippageBps",
+          inputs: [
+            {
+              name: "bps",
+              type: "uint16",
+              internalType: "uint16",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "setSplit",
+          inputs: [
+            {
+              name: "charity",
+              type: "uint16",
+              internalType: "uint16",
+            },
+            {
+              name: "burn",
+              type: "uint16",
+              internalType: "uint16",
+            },
+            {
+              name: "treasury_",
+              type: "uint16",
+              internalType: "uint16",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "setSwapPath",
+          inputs: [
+            {
+              name: "path",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "setTreasury",
           inputs: [
             {
@@ -571,6 +762,71 @@ const deployedContracts = {
           ],
           outputs: [],
           stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "singleHopFee",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint24",
+              internalType: "uint24",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "slippageBps",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint16",
+              internalType: "uint16",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "splitBurnBps",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint16",
+              internalType: "uint16",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "splitCharityBps",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint16",
+              internalType: "uint16",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "splitTreasuryBps",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint16",
+              internalType: "uint16",
+            },
+          ],
+          stateMutability: "view",
         },
         {
           type: "function",
@@ -605,6 +861,71 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "swapPath",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "totalBurned",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "totalCharityDonatedUsdc",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "totalCreaturesSubmitted",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "totalTreasury",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "transferOwnership",
           inputs: [
             {
@@ -625,6 +946,32 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "twoHopFee1",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint24",
+              internalType: "uint24",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "twoHopFee2",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint24",
+              internalType: "uint24",
             },
           ],
           stateMutability: "view",
@@ -860,6 +1207,49 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "PaymentProcessed",
+          inputs: [
+            {
+              name: "payer",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "totalAmount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "burnAmount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "treasuryAmount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "charityAmount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "usdcDonated",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "PricesUpdated",
           inputs: [
             {
@@ -879,6 +1269,44 @@ const deployedContracts = {
               type: "uint256",
               indexed: false,
               internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SplitUpdated",
+          inputs: [
+            {
+              name: "charity",
+              type: "uint16",
+              indexed: false,
+              internalType: "uint16",
+            },
+            {
+              name: "burn",
+              type: "uint16",
+              indexed: false,
+              internalType: "uint16",
+            },
+            {
+              name: "treasury",
+              type: "uint16",
+              indexed: false,
+              internalType: "uint16",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SwapPathUpdated",
+          inputs: [
+            {
+              name: "path",
+              type: "uint8",
+              indexed: false,
+              internalType: "uint8",
             },
           ],
           anonymous: false,
@@ -973,6 +1401,11 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "InvalidSplit",
+          inputs: [],
+        },
+        {
+          type: "error",
           name: "ObservationLockedOut",
           inputs: [],
         },
@@ -1031,12 +1464,17 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "SlippageTooHigh",
+          inputs: [],
+        },
+        {
+          type: "error",
           name: "ZeroAddress",
           inputs: [],
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 45795366,
+      deployedOnBlock: 45797405,
     },
   },
 } as const;

@@ -281,20 +281,40 @@ type CategoryState = {
   challengeRound: bigint;
 };
 
-function decodeCategory(raw: readonly unknown[] | undefined): CategoryState | undefined {
-  if (!raw || raw.length < 10) return undefined;
-  return {
-    championObsId: raw[0] as bigint,
-    championOwner: raw[1] as `0x${string}`,
-    challengerObsId: raw[2] as bigint,
-    challengerOwner: raw[3] as `0x${string}`,
-    championVotes: raw[4] as bigint,
-    challengerVotes: raw[5] as bigint,
-    challengeStart: BigInt(raw[6] as bigint | number),
-    cooldownEnd: BigInt(raw[7] as bigint | number),
-    reignStart: BigInt(raw[8] as bigint | number),
-    challengeRound: BigInt(raw[9] as bigint | number),
-  };
+// SB-1 fix: viem returns named object for tuple structs, not an array.
+function decodeCategory(raw: any): CategoryState | undefined {
+  if (!raw) return undefined;
+  // Named-object path (viem default for structs with named components)
+  if (typeof raw === "object" && "championObsId" in raw) {
+    return {
+      championObsId: raw.championObsId as bigint,
+      championOwner: raw.championOwner as `0x${string}`,
+      challengerObsId: raw.challengerObsId as bigint,
+      challengerOwner: raw.challengerOwner as `0x${string}`,
+      championVotes: raw.championVotes as bigint,
+      challengerVotes: raw.challengerVotes as bigint,
+      challengeStart: BigInt(raw.challengeStart as bigint | number),
+      cooldownEnd: BigInt(raw.cooldownEnd as bigint | number),
+      reignStart: BigInt(raw.reignStart as bigint | number),
+      challengeRound: BigInt(raw.challengeRound as bigint | number),
+    };
+  }
+  // Fallback: array-indexed (legacy)
+  if (Array.isArray(raw) && raw.length >= 10) {
+    return {
+      championObsId: raw[0] as bigint,
+      championOwner: raw[1] as `0x${string}`,
+      challengerObsId: raw[2] as bigint,
+      challengerOwner: raw[3] as `0x${string}`,
+      championVotes: raw[4] as bigint,
+      challengerVotes: raw[5] as bigint,
+      challengeStart: BigInt(raw[6] as bigint | number),
+      cooldownEnd: BigInt(raw[7] as bigint | number),
+      reignStart: BigInt(raw[8] as bigint | number),
+      challengeRound: BigInt(raw[9] as bigint | number),
+    };
+  }
+  return undefined;
 }
 
 // ----------------------------------------------------------------------------
@@ -353,7 +373,20 @@ function ActionModal({
 }) {
   const { address: account } = useAccount();
   const cost = kind === "submit" ? SUBMIT_PRICE : CHALLENGE_PRICE;
-  const half = cost / 2n;
+
+  const { data: splitCharityBps } = useScaffoldReadContract({
+    contractName: "ClawdSearch",
+    functionName: "splitCharityBps",
+  });
+  const { data: splitBurnBps } = useScaffoldReadContract({
+    contractName: "ClawdSearch",
+    functionName: "splitBurnBps",
+  });
+  const charityBps = (splitCharityBps as bigint | undefined) ?? 8000n;
+  const burnBps = (splitBurnBps as bigint | undefined) ?? 1000n;
+  const charityAmount = (cost * charityBps) / 10000n;
+  const burnAmount = (cost * burnBps) / 10000n;
+  const treasuryAmount = cost - charityAmount - burnAmount;
 
   const [list, setList] = useState<INatObservation[]>([]);
   const [listLoading, setListLoading] = useState<boolean>(false);
@@ -627,7 +660,9 @@ function ActionModal({
           <ConfirmPanel
             picked={picked}
             kind={kind}
-            half={half}
+            charityAmount={charityAmount}
+            burnAmount={burnAmount}
+            treasuryAmount={treasuryAmount}
             costLabel={costLabel}
             balance={balance}
             allowance={allowance}
@@ -650,7 +685,9 @@ function ActionModal({
 function ConfirmPanel({
   picked,
   kind,
-  half,
+  charityAmount,
+  burnAmount,
+  treasuryAmount,
   costLabel,
   balance,
   allowance,
@@ -665,7 +702,9 @@ function ConfirmPanel({
 }: {
   picked: INatObservation;
   kind: ModalKind;
-  half: bigint;
+  charityAmount: bigint;
+  burnAmount: bigint;
+  treasuryAmount: bigint;
   costLabel: string;
   balance: bigint;
   allowance: bigint;
@@ -715,8 +754,10 @@ function ConfirmPanel({
 
       <div className="bg-base-200 rounded-lg p-4 text-sm flex flex-col gap-1">
         <div className="font-semibold">Cost: {costLabel}</div>
-        <div>
-          🔥 {formatClawd(half)} CLAWD burned + 🏛️ {formatClawd(half)} CLAWD to treasury
+        <div className="flex flex-col gap-0.5">
+          <span>🌿 {formatClawd(charityAmount)} CLAWD → wildlife conservation (WWF)</span>
+          <span>🔥 {formatClawd(burnAmount)} CLAWD burned</span>
+          <span>🏛️ {formatClawd(treasuryAmount)} CLAWD to builders fund</span>
         </div>
         {kind === "challenge" && (
           <div className="text-warning mt-1">
@@ -867,6 +908,7 @@ function VoteButton({
     } catch (e) {
       setWaitingForAllowance(false);
       console.error(e);
+      notification.error("Vote failed or was rejected");
     }
   };
 
@@ -874,7 +916,10 @@ function VoteButton({
   const pending = approvePending || actionPending || waitingForAllowance;
 
   return (
-    <div className="tooltip tooltip-top flex-1" data-tip="100 CLAWD: 🔥 50 burned + 🏛️ 50 to treasury">
+    <div
+      className="tooltip tooltip-top flex-1"
+      data-tip="100 CLAWD: 🌿 80 to wildlife · 🔥 10 burned · 🏛️ 10 to builders fund"
+    >
       <button
         className={`btn btn-sm ${forChallenger ? "btn-warning" : "btn-info"} w-full`}
         onClick={handleVote}
@@ -937,6 +982,7 @@ function CategoryCard({ config }: { config: CategoryConfig }) {
   const now = useNow();
   const { address: account, chain } = useAccount();
   const onWrongNetwork = !!chain && chain.id !== CHAIN_ID;
+  const { switchChain } = useSwitchChain();
 
   const { data: rawCategory, refetch: refetchCategory } = useScaffoldReadContract({
     contractName: "ClawdSearch",
@@ -996,13 +1042,15 @@ function CategoryCard({ config }: { config: CategoryConfig }) {
           <div className="flex flex-col items-center text-center gap-3 py-4">
             <div className="text-4xl opacity-50">👑</div>
             <p className="text-sm opacity-70 my-0">No champion yet. Be the first.</p>
-            <button
-              className="btn btn-primary btn-sm w-full"
-              disabled={onWrongNetwork || !account}
-              onClick={() => setModal("submit")}
-            >
-              Submit Champion — 1,000 CLAWD
-            </button>
+            {onWrongNetwork ? (
+              <button className="btn btn-warning btn-sm w-full" onClick={() => switchChain({ chainId: CHAIN_ID })}>
+                Switch to Base
+              </button>
+            ) : (
+              <button className="btn btn-primary btn-sm w-full" disabled={!account} onClick={() => setModal("submit")}>
+                Submit Champion — 1,000 CLAWD
+              </button>
+            )}
           </div>
         ) : challengerActive ? (
           <ChallengeView
@@ -1064,6 +1112,7 @@ function ChampionView({
   onWrongNetwork: boolean;
   account?: string;
 }) {
+  const { switchChain } = useSwitchChain();
   return (
     <div className="flex flex-col gap-3">
       <CreaturePhoto obsId={cat.championObsId} />
@@ -1096,8 +1145,12 @@ function ChampionView({
         <button className="btn btn-sm w-full" disabled>
           Next challenge in {shortDuration(cooldownRemaining)}
         </button>
+      ) : onWrongNetwork ? (
+        <button className="btn btn-warning btn-sm w-full" onClick={() => switchChain({ chainId: CHAIN_ID })}>
+          Switch to Base
+        </button>
       ) : (
-        <button className="btn btn-warning btn-sm w-full" onClick={onChallenge} disabled={onWrongNetwork || !account}>
+        <button className="btn btn-warning btn-sm w-full" onClick={onChallenge} disabled={!account}>
           Challenge — 100 CLAWD
         </button>
       )}
@@ -1208,8 +1261,8 @@ function HowItWorks() {
         <ol className="list-decimal list-inside space-y-3 text-sm">
           <li>
             <strong>Submit a Champion.</strong> Pick a real creature from iNaturalist and spend{" "}
-            <strong>1,000 CLAWD</strong> to crown them champion of a category. Half is burned, half goes to the CLAWD
-            treasury.
+            <strong>1,000 CLAWD</strong> to crown them champion of a category. 80% goes to wildlife conservation (WWF
+            via Endaoment), 10% is burned, 10% goes to the builders fund.
           </li>
           <li>
             <strong>Challenge.</strong> Think you&apos;ve got a better creature? Spend <strong>100 CLAWD</strong> to
@@ -1468,6 +1521,48 @@ function WalletStrip() {
 }
 
 // ----------------------------------------------------------------------------
+// Stat strip
+// ----------------------------------------------------------------------------
+
+function StatStrip() {
+  const { data: totalBurned } = useScaffoldReadContract({
+    contractName: "ClawdSearch",
+    functionName: "totalBurned",
+  });
+  const { data: totalCharityUsdc } = useScaffoldReadContract({
+    contractName: "ClawdSearch",
+    functionName: "totalCharityDonatedUsdc",
+  });
+  const { data: totalCreatures } = useScaffoldReadContract({
+    contractName: "ClawdSearch",
+    functionName: "totalCreaturesSubmitted",
+  });
+
+  const burnedClawd = (totalBurned as bigint | undefined) ?? 0n;
+  const charityUsdc = (totalCharityUsdc as bigint | undefined) ?? 0n;
+  const creaturesCount = (totalCreatures as bigint | undefined) ?? 0n;
+
+  const usdcFormatted = (Number(charityUsdc) / 1e6).toFixed(2);
+
+  return (
+    <div className="grid grid-cols-3 gap-3 text-center">
+      <div className="bg-base-100 border border-base-300 rounded-lg p-3">
+        <div className="text-lg font-bold">{creaturesCount.toString()}</div>
+        <div className="text-xs opacity-60">Creatures submitted</div>
+      </div>
+      <div className="bg-base-100 border border-base-300 rounded-lg p-3">
+        <div className="text-lg font-bold">🔥 {formatClawd(burnedClawd)}</div>
+        <div className="text-xs opacity-60">CLAWD burned</div>
+      </div>
+      <div className="bg-base-100 border border-base-300 rounded-lg p-3">
+        <div className="text-lg font-bold">🌿 ${usdcFormatted}</div>
+        <div className="text-xs opacity-60">USDC to wildlife</div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Main exported component
 // ----------------------------------------------------------------------------
 
@@ -1481,6 +1576,8 @@ export default function ClawdSearchApp() {
         </header>
 
         <WalletStrip />
+
+        <StatStrip />
 
         <HowItWorks />
 
@@ -1520,6 +1617,15 @@ export default function ClawdSearchApp() {
                 <span className="opacity-60 w-32">Burn:</span>
                 <AddressComp
                   address={"0x000000000000000000000000000000000000dEaD"}
+                  format="short"
+                  size="sm"
+                  chain={base}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="opacity-60 w-32">WWF (Endaoment):</span>
+                <AddressComp
+                  address={"0x3c57365D198586d6Bc0e3e3f6b9a63E17425aC52"}
                   format="short"
                   size="sm"
                   chain={base}

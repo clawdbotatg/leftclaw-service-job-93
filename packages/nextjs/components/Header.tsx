@@ -14,7 +14,10 @@ export const Header = () => {
           </div>
         </Link>
       </div>
-      <div className="navbar-end">
+      <div className="navbar-end gap-3">
+        <Link href="/about" className="text-sm font-medium opacity-70 hover:opacity-100 hidden sm:block">
+          About
+        </Link>
         <RainbowKitCustomConnectButton />
       </div>
     </div>

@@ -5,7 +5,12 @@ import { Test } from "forge-std/Test.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { ClawdSearch } from "../contracts/ClawdSearch.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+
+// =========================================================================
+//                              MOCK CONTRACTS
+// =========================================================================
 
 contract MockClawd is ERC20 {
     constructor() ERC20("Clawd", "CLAWD") { }
@@ -15,11 +20,107 @@ contract MockClawd is ERC20 {
     }
 }
 
+contract MockUSDC is ERC20 {
+    constructor() ERC20("USD Coin", "USDC") { }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+/// @dev Swaps CLAWD for mock USDC at a fixed rate (1000 CLAWD = 1 USDC in 6-decimal units).
+///      Uses immutable USDC address so vm.etch captures it in bytecode.
+contract MockSwapRouter {
+    address private immutable usdc;
+
+    constructor(address _usdc) {
+        usdc = _usdc;
+    }
+
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256) {
+        IERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
+        uint256 out = params.amountIn / 1e12; // 1e18 CLAWD → 1e6 USDC
+        MockUSDC(usdc).mint(params.recipient, out);
+        return out;
+    }
+
+    struct ExactInputParams {
+        bytes path;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+    }
+
+    function exactInput(ExactInputParams calldata params) external payable returns (uint256) {
+        address tokenIn;
+        bytes memory path = params.path;
+        assembly {
+            tokenIn := shr(96, mload(add(path, 0x20)))
+        }
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
+        uint256 out = params.amountIn / 1e12;
+        MockUSDC(usdc).mint(params.recipient, out);
+        return out;
+    }
+}
+
+/// @dev Returns a fixed quote of amountIn / 1e12 (same rate as MockSwapRouter).
+contract MockQuoterV2 {
+    struct QuoteExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint24 fee;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function quoteExactInputSingle(QuoteExactInputSingleParams memory params)
+        external
+        pure
+        returns (uint256, uint160, uint32, uint256)
+    {
+        return (params.amountIn / 1e12, 0, 0, 0);
+    }
+
+    function quoteExactInput(bytes memory, uint256 amountIn)
+        external
+        pure
+        returns (uint256, uint160[] memory, uint32[] memory, uint256)
+    {
+        uint160[] memory a;
+        uint32[] memory b;
+        return (amountIn / 1e12, a, b, 0);
+    }
+}
+
+/// @dev Accepts any `donate` call (no-op).
+contract MockEndaomentEntity {
+    function donate(uint256) external { }
+}
+
+// =========================================================================
+//                              TEST BASE
+// =========================================================================
+
 abstract contract ClawdSearchTestBase is Test {
     address constant CLAWD_ADDR = 0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07;
+    address constant USDC_ADDR = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address constant ROUTER_ADDR = 0x2626664c2603336E57B271c5C0b26F421741e481;
+    address constant QUOTER_ADDR = 0x61fFE014bA17989E743c5F6cB21bF9697530B21e;
+    address constant WWF_ADDR = 0x3c57365D198586d6Bc0e3e3f6b9a63E17425aC52;
     address constant TREASURY = 0x90eF2A9211A3E7CE788561E5af54C76B0Fa3aEd0;
+    address constant BURN = 0x000000000000000000000000000000000000dEaD;
 
-    // Seeded category IDs (constructor order)
     uint256 constant CAT_PUDGY_PENGUIN = 0;
     uint256 constant CAT_DAPPER_LOBSTER = 1;
     uint256 constant CAT_PEPE_FROG = 2;
@@ -29,6 +130,7 @@ abstract contract ClawdSearchTestBase is Test {
 
     ClawdSearch internal cs;
     MockClawd internal clawd;
+    MockUSDC internal usdc;
 
     address internal owner = address(0xC0FFEE);
     address internal alice = address(0xA11CE);
@@ -42,13 +144,36 @@ abstract contract ClawdSearchTestBase is Test {
     uint256 constant CHALLENGE_DURATION = 48 hours;
     uint256 constant COOLDOWN = 1 hours;
 
+    // Default split: 80/10/10
+    uint256 constant CHARITY_BPS = 8000;
+    uint256 constant BURN_BPS = 1000;
+    uint256 constant TREASURY_BPS = 1000;
+
     function setUp() public virtual {
-        MockClawd template = new MockClawd();
-        bytes memory rt = address(template).code;
-        vm.etch(CLAWD_ADDR, rt);
+        // Etch MockClawd at CLAWD_ADDR
+        MockClawd clawdTemplate = new MockClawd();
+        vm.etch(CLAWD_ADDR, address(clawdTemplate).code);
         clawd = MockClawd(CLAWD_ADDR);
 
-        cs = new ClawdSearch(owner);
+        // Etch MockUSDC at USDC_ADDR
+        MockUSDC usdcTemplate = new MockUSDC();
+        vm.etch(USDC_ADDR, address(usdcTemplate).code);
+        usdc = MockUSDC(USDC_ADDR);
+
+        // Etch MockSwapRouter at ROUTER_ADDR (immutable USDC_ADDR baked into bytecode)
+        MockSwapRouter routerTemplate = new MockSwapRouter(USDC_ADDR);
+        vm.etch(ROUTER_ADDR, address(routerTemplate).code);
+
+        // Etch MockQuoterV2 at QUOTER_ADDR
+        MockQuoterV2 quoterTemplate = new MockQuoterV2();
+        vm.etch(QUOTER_ADDR, address(quoterTemplate).code);
+
+        // Etch MockEndaomentEntity at WWF_ADDR
+        MockEndaomentEntity endaoTemplate = new MockEndaomentEntity();
+        vm.etch(WWF_ADDR, address(endaoTemplate).code);
+
+        // Deploy ClawdSearch with TWO_HOP path
+        cs = new ClawdSearch(owner, uint8(1));
 
         for (uint256 i = 0; i < 4; i++) {
             address user = [alice, bob, carol, dave][i];
@@ -72,6 +197,10 @@ abstract contract ClawdSearchTestBase is Test {
         vm.prank(who);
         cs.vote(catId, forChallenger);
     }
+
+    function _splitAmount(uint256 total, uint256 bps) internal pure returns (uint256) {
+        return (total * bps) / 10_000;
+    }
 }
 
 // =========================================================================
@@ -81,14 +210,16 @@ abstract contract ClawdSearchTestBase is Test {
 contract ClawdSearchSubmitTest is ClawdSearchTestBase {
     function test_submit_setsChampionAndSplitsClawd() public {
         uint256 aliceBalBefore = clawd.balanceOf(alice);
-        uint256 burnBefore = clawd.balanceOf(0x000000000000000000000000000000000000dEaD);
+        uint256 burnBefore = clawd.balanceOf(BURN);
         uint256 trBefore = clawd.balanceOf(TREASURY);
 
         _submit(alice, CAT_CUTEST, 42);
 
         assertEq(clawd.balanceOf(alice), aliceBalBefore - SUBMIT_PRICE);
-        assertEq(clawd.balanceOf(0x000000000000000000000000000000000000dEaD), burnBefore + 500 * 1e18);
-        assertEq(clawd.balanceOf(TREASURY), trBefore + 500 * 1e18);
+        // burn = 10% of 1000e18 = 100e18
+        assertEq(clawd.balanceOf(BURN), burnBefore + _splitAmount(SUBMIT_PRICE, BURN_BPS));
+        // treasury = 10% of 1000e18 = 100e18
+        assertEq(clawd.balanceOf(TREASURY), trBefore + _splitAmount(SUBMIT_PRICE, TREASURY_BPS));
 
         ClawdSearch.CategoryState memory s = cs.getCategory(CAT_CUTEST);
         assertEq(s.championObsId, 42);
@@ -99,6 +230,20 @@ contract ClawdSearchSubmitTest is ClawdSearchTestBase {
         assertEq(submitted, 1);
         assertEq(won, 0);
         assertEq(reign, 0);
+    }
+
+    function test_submit_incrementsTotalCreaturesSubmitted() public {
+        assertEq(cs.totalCreaturesSubmitted(), 0);
+        _submit(alice, CAT_CUTEST, 1);
+        assertEq(cs.totalCreaturesSubmitted(), 1);
+        _submit(bob, CAT_BEST_EYES, 2);
+        assertEq(cs.totalCreaturesSubmitted(), 2);
+    }
+
+    function test_submit_accumulatesTotalBurnedAndTreasury() public {
+        _submit(alice, CAT_CUTEST, 42);
+        assertEq(cs.totalBurned(), _splitAmount(SUBMIT_PRICE, BURN_BPS));
+        assertEq(cs.totalTreasury(), _splitAmount(SUBMIT_PRICE, TREASURY_BPS));
     }
 
     function test_submit_revertsWhenCategoryAlreadyHasChampion() public {
@@ -454,7 +599,7 @@ contract ClawdSearchAdminTest is ClawdSearchTestBase {
     }
 
     function test_addCategory_incrementsNextId() public {
-        assertEq(cs.nextCategoryId(), 6); // 6 seeded in constructor
+        assertEq(cs.nextCategoryId(), 6);
         vm.prank(owner);
         uint256 newId = cs.addCategory("Best Tail", 9999);
         assertEq(newId, 6);
@@ -466,7 +611,6 @@ contract ClawdSearchAdminTest is ClawdSearchTestBase {
     }
 
     function test_setCategoryActive_toggles() public {
-        // All seeded categories start active.
         ClawdSearch.CategoryData memory d = cs.getCategoryData(CAT_CUTEST);
         assertTrue(d.active);
 
@@ -475,12 +619,10 @@ contract ClawdSearchAdminTest is ClawdSearchTestBase {
         d = cs.getCategoryData(CAT_CUTEST);
         assertFalse(d.active);
 
-        // Submit should now revert.
         vm.prank(alice);
         vm.expectRevert(ClawdSearch.CategoryNotActive.selector);
         cs.submit(CAT_CUTEST, 1);
 
-        // Re-enable.
         vm.prank(owner);
         cs.setCategoryActive(CAT_CUTEST, true);
         _submit(alice, CAT_CUTEST, 1);
@@ -497,6 +639,57 @@ contract ClawdSearchAdminTest is ClawdSearchTestBase {
         assertEq(d3.taxonId, 1);
         assertTrue(d3.active);
     }
+
+    // Phase 3 admin tests
+    function test_setSplit_ownerOnly() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        cs.setSplit(7000, 2000, 1000);
+    }
+
+    function test_setSplit_mustSumTo10000() public {
+        vm.prank(owner);
+        vm.expectRevert(ClawdSearch.InvalidSplit.selector);
+        cs.setSplit(7000, 2000, 500); // sum = 9500, not 10000
+    }
+
+    function test_setSplit_happy() public {
+        vm.prank(owner);
+        cs.setSplit(7000, 2000, 1000);
+        assertEq(cs.splitCharityBps(), 7000);
+        assertEq(cs.splitBurnBps(), 2000);
+        assertEq(cs.splitTreasuryBps(), 1000);
+    }
+
+    function test_setSlippageBps_ownerOnly() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        cs.setSlippageBps(200);
+    }
+
+    function test_setSlippageBps_capAt500() public {
+        vm.prank(owner);
+        vm.expectRevert(ClawdSearch.SlippageTooHigh.selector);
+        cs.setSlippageBps(501);
+    }
+
+    function test_setSlippageBps_happy() public {
+        vm.prank(owner);
+        cs.setSlippageBps(200);
+        assertEq(cs.slippageBps(), 200);
+    }
+
+    function test_setSwapPath_ownerOnly() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        cs.setSwapPath(uint8(0));
+    }
+
+    function test_setSwapPath_happy() public {
+        vm.prank(owner);
+        cs.setSwapPath(uint8(0));
+        assertEq(cs.swapPath(), uint8(0));
+    }
 }
 
 // =========================================================================
@@ -504,11 +697,10 @@ contract ClawdSearchAdminTest is ClawdSearchTestBase {
 // =========================================================================
 
 contract ClawdSearchAuditFixesTest is ClawdSearchTestBase {
-    address constant BURN = 0x000000000000000000000000000000000000dEaD;
-
-    function test_oddAmountSplit_burnGetsLargerHalf() public {
+    function test_split_charityGetsRemainder() public {
+        // Verify split math: charity = total - burn - treasury (gets rounding remainder)
         vm.prank(owner);
-        cs.setPrices(101, 0, 0);
+        cs.setPrices(101, 0, 0); // odd amount
 
         uint256 aliceBefore = clawd.balanceOf(alice);
         uint256 burnBefore = clawd.balanceOf(BURN);
@@ -516,9 +708,12 @@ contract ClawdSearchAuditFixesTest is ClawdSearchTestBase {
 
         _submit(alice, CAT_CUTEST, 7);
 
+        // burn = 101 * 1000 / 10000 = 10
+        // treasury = 101 * 1000 / 10000 = 10
+        // charity = 101 - 10 - 10 = 81 (gets remainder)
         assertEq(clawd.balanceOf(alice), aliceBefore - 101);
-        assertEq(clawd.balanceOf(BURN), burnBefore + 51);
-        assertEq(clawd.balanceOf(TREASURY), trBefore + 50);
+        assertEq(clawd.balanceOf(BURN), burnBefore + 10);
+        assertEq(clawd.balanceOf(TREASURY), trBefore + 10);
     }
 
     function test_hasVoted_roundScopingAcrossConsecutiveChallenges() public {
@@ -612,8 +807,9 @@ contract ClawdSearchAuditFixesTest is ClawdSearchTestBase {
 
         _submit(alice, CAT_CUTEST, 1);
 
+        // treasury gets 10% of submitPrice
         assertEq(clawd.balanceOf(TREASURY), oldTrBefore);
-        assertEq(clawd.balanceOf(newTreasury), newTrBefore + 500 * 1e18);
+        assertEq(clawd.balanceOf(newTreasury), newTrBefore + _splitAmount(SUBMIT_PRICE, TREASURY_BPS));
     }
 
     function test_emit_championCrowned_onSubmit() public {
@@ -652,35 +848,59 @@ contract ClawdSearchAuditFixesTest is ClawdSearchTestBase {
         cs.resolve(CAT_CUTEST);
     }
 
+    function test_emit_paymentProcessed_onSubmit() public {
+        uint256 burnAmt = _splitAmount(SUBMIT_PRICE, BURN_BPS);
+        uint256 trAmt = _splitAmount(SUBMIT_PRICE, TREASURY_BPS);
+        uint256 charityAmt = SUBMIT_PRICE - burnAmt - trAmt;
+        uint256 expectedUsdc = charityAmt / 1e12; // mock rate
+
+        vm.expectEmit(true, false, false, true, address(cs));
+        emit ClawdSearch.PaymentProcessed(alice, SUBMIT_PRICE, burnAmt, trAmt, charityAmt, expectedUsdc);
+        _submit(alice, CAT_CUTEST, 42);
+    }
+
+    function test_totalCharityDonatedUsdc_accumulatesOnSubmit() public {
+        assertEq(cs.totalCharityDonatedUsdc(), 0);
+        _submit(alice, CAT_CUTEST, 1);
+        uint256 charityAmt = SUBMIT_PRICE - _splitAmount(SUBMIT_PRICE, BURN_BPS) - _splitAmount(SUBMIT_PRICE, TREASURY_BPS);
+        uint256 expectedUsdc = charityAmt / 1e12;
+        assertEq(cs.totalCharityDonatedUsdc(), expectedUsdc);
+    }
+
     function test_constructor_emitsInitialConfigEvents() public {
         vm.recordLogs();
-        ClawdSearch fresh = new ClawdSearch(owner);
+        ClawdSearch fresh = new ClawdSearch(owner, uint8(1));
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         bytes32 treasurySig = keccak256("TreasuryUpdated(address)");
         bytes32 pricesSig = keccak256("PricesUpdated(uint256,uint256,uint256)");
         bytes32 categoryAddedSig = keccak256("CategoryAdded(uint256,string,uint32)");
+        bytes32 splitSig = keccak256("SplitUpdated(uint16,uint16,uint16)");
+        bytes32 swapPathSig = keccak256("SwapPathUpdated(uint8)");
 
         bool sawTreasury;
         bool sawPrices;
+        bool sawSplit;
+        bool sawSwapPath;
         uint256 categoryAddedCount;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].emitter != address(fresh)) continue;
             if (logs[i].topics[0] == treasurySig) {
                 sawTreasury = true;
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), 0x90eF2A9211A3E7CE788561E5af54C76B0Fa3aEd0);
             } else if (logs[i].topics[0] == pricesSig) {
                 sawPrices = true;
-                (uint256 sP, uint256 cP, uint256 vP) = abi.decode(logs[i].data, (uint256, uint256, uint256));
-                assertEq(sP, SUBMIT_PRICE);
-                assertEq(cP, CHALLENGE_PRICE);
-                assertEq(vP, VOTE_PRICE);
             } else if (logs[i].topics[0] == categoryAddedSig) {
                 categoryAddedCount++;
+            } else if (logs[i].topics[0] == splitSig) {
+                sawSplit = true;
+            } else if (logs[i].topics[0] == swapPathSig) {
+                sawSwapPath = true;
             }
         }
         assertTrue(sawTreasury, "constructor should emit TreasuryUpdated");
         assertTrue(sawPrices, "constructor should emit PricesUpdated");
+        assertTrue(sawSplit, "constructor should emit SplitUpdated");
+        assertTrue(sawSwapPath, "constructor should emit SwapPathUpdated");
         assertEq(categoryAddedCount, 6, "constructor should emit 6 CategoryAdded events");
     }
 }
