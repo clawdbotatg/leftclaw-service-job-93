@@ -120,3 +120,32 @@ leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
 - packages/foundry/test/ClawdSearch.t.sol (update all enum refs)
 - packages/nextjs/contracts/deployedContracts.ts (auto-regen after deploy)
 - packages/nextjs/app/_components/ClawdSearchApp.tsx (full rewrite of logic layer)
+
+---
+
+# Feature Plan — Job 152: Audit Bug Fixes + Text Changes
+
+## Mode
+leftclaw — direct push to clawdbotatg/leftclaw-service-job-93
+
+## Changes
+
+### 1. Fix stale-closure bug in approval polling (SB-4)
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+- In `handleApprove` (ActionModal): use `refetch()` return value, not stale `allowanceRead.data`.
+- In `handleVote` (VoteButton): same fix for the promise-based poll.
+
+### 2. Fix silent error handling (SF-9)
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+- In `handleAction`: add `notification.error(...)` in the empty catch block.
+- In `ResolveButton.handle`: add `notification.error(...)` in the empty catch block.
+
+### 3. Fix wrong contract address in Footer (SB-8)
+File: `packages/nextjs/components/Footer.tsx`
+- Change `CONTRACT_ADDRESS` from `0x1C67563F968256778847407583d9E6aBe1e263e7`
+  to `0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74`.
+
+### 4. Text changes (customer request)
+File: `packages/nextjs/app/_components/ClawdSearchApp.tsx`
+- Change tagline for category id=1 from `"Anthropic-y. Scarlet. Pixel-poet."` → `"Drinks Tea. Builds Things;"`.
+- After `Real creatures. Real competition.` add `Real Donations` as a new paragraph.

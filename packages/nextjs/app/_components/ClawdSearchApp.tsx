@@ -45,7 +45,7 @@ const CATEGORY_CONFIG = [
     id: 1,
     title: "Most Dapper Lobster",
     emoji: "🦞",
-    tagline: "Anthropic-y. Scarlet. Pixel-poet.",
+    tagline: "Drinks Tea. Builds Things;",
     taxonId: 47764,
     hint: "Lobsters only",
   },
@@ -513,8 +513,8 @@ function ActionModal({
       let tries = 0;
       const id = setInterval(async () => {
         tries += 1;
-        await allowanceRead.refetch();
-        if (((allowanceRead.data as bigint | undefined) ?? 0n) >= cost || tries > 20) {
+        const result = await allowanceRead.refetch();
+        if (((result.data as bigint | undefined) ?? 0n) >= cost || tries > 20) {
           clearInterval(id);
           setWaitingForAllowance(false);
         }
@@ -542,6 +542,7 @@ function ActionModal({
       onClose();
     } catch (e) {
       console.error(e);
+      notification.error("Transaction failed or was rejected");
     }
   };
 
@@ -888,8 +889,8 @@ function VoteButton({
         await new Promise<void>(resolve => {
           const id = setInterval(async () => {
             tries += 1;
-            await allowanceRead.refetch();
-            const newAllowance = (allowanceRead.data as bigint | undefined) ?? 0n;
+            const result = await allowanceRead.refetch();
+            const newAllowance = (result.data as bigint | undefined) ?? 0n;
             if (newAllowance >= VOTE_PRICE || tries > 20) {
               clearInterval(id);
               resolve();
@@ -958,6 +959,7 @@ function ResolveButton({ categoryId, onResolved }: { categoryId: number; onResol
       onResolved();
     } catch (e) {
       console.error(e);
+      notification.error("Resolve failed or was rejected");
     }
   };
   return (
@@ -1573,6 +1575,7 @@ export default function ClawdSearchApp() {
         <header className="text-center py-4">
           <h1 className="text-5xl sm:text-6xl font-bold my-2 tracking-tight">Creature Feature</h1>
           <p className="opacity-70 my-2 text-lg">Real creatures. Real competition.</p>
+          <p className="opacity-70 my-1 text-base">Real Donations</p>
         </header>
 
         <WalletStrip />

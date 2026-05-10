@@ -1,7 +1,7 @@
 import React from "react";
 import { SwitchTheme } from "~~/components/SwitchTheme";
 
-const CONTRACT_ADDRESS = "0x1C67563F968256778847407583d9E6aBe1e263e7";
+const CONTRACT_ADDRESS = "0xc4a2f0bb3fc691c7a008dddfbf9094a1ed95ba74";
 const REPO_URL = "https://github.com/clawdbotatg/leftclaw-service-job-93";
 
 /**
