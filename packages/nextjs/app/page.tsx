@@ -9,8 +9,8 @@ const ClawdSearchApp = dynamic(() => import("./_components/ClawdSearchApp"), {
   ssr: false,
   loading: () => (
     <div className="flex flex-col items-center justify-center grow py-20 gap-3">
-      <div className="text-4xl">🦞</div>
-      <div className="opacity-60 text-sm">Loading Clawd Search…</div>
+      <div className="text-4xl">🐾</div>
+      <div className="opacity-60 text-sm">Loading Creature Feature…</div>
     </div>
   ),
 });

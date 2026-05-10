@@ -6,8 +6,8 @@ import "~~/styles/globals.css";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 export const metadata = getMetadata({
-  title: "Clawd Search",
-  description: "Real lobsters compete for crowns across three absurd categories. Burn CLAWD to play.",
+  title: "Creature Feature",
+  description: "Real creatures. Real competition. Burn CLAWD to crown champions across six categories.",
 });
 
 const ScaffoldEthApp = ({ children }: { children: React.ReactNode }) => {

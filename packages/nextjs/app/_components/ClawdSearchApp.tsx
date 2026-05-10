@@ -40,24 +40,36 @@ const CATEGORY_META: Record<Category, { title: string; emoji: string; tooltip: s
   [Category.WouldWinInAFight]: {
     title: "Would Win In A Fight",
     emoji: "🥊",
-    tooltip: "The toughest lobster — judged by the community",
-    tagline: "Pure tournament lobster energy.",
+    tooltip: "The toughest creature — judged by the community",
+    tagline: "Pure tournament energy.",
   },
   [Category.Cutest]: {
     title: "Cutest",
     emoji: "🥺",
-    tooltip: "The most adorable lobster — judged by the community",
-    tagline: "Soft. Smol. Snek-claw.",
+    tooltip: "The most adorable creature — judged by the community",
+    tagline: "Soft. Smol. Irresistible.",
   },
   [Category.LooksMostLikeCLAWDMascot]: {
-    title: "Looks Most Like CLAWD Mascot",
+    title: "Most Dapper Lobster",
     emoji: "🦞",
-    tooltip: "The lobster that most resembles the CLAWD mascot",
+    tooltip: "The creature that most resembles the CLAWD mascot",
     tagline: "Anthropic-y. Scarlet. Pixel-poet.",
   },
 };
 
-const CATEGORY_LIST: Category[] = [Category.WouldWinInAFight, Category.Cutest, Category.LooksMostLikeCLAWDMascot];
+// Only these two categories are surfaced in the UI. WouldWinInAFight is
+// retired for tone reasons; the on-chain enum still exists but is not rendered.
+const ACTIVE_CATEGORIES: Category[] = [Category.Cutest, Category.LooksMostLikeCLAWDMascot];
+
+// Placeholder cards shown in the grid with "Coming Soon" badges.
+// Future Feature jobs will wire these to real on-chain Crowns — to add one,
+// move it from here to ACTIVE_CATEGORIES and pass the Category enum value.
+const PLACEHOLDER_CARDS: { title: string; emoji: string; tagline: string }[] = [
+  { title: "Most Pepe Frog", emoji: "🐸", tagline: "Kek energy. Community decides." },
+  { title: "Most Pudgy Penguin", emoji: "🐧", tagline: "Round. Waddly. Undeniable." },
+  { title: "Best Bug", emoji: "🐛", tagline: "Six legs, zero chill." },
+  { title: "Best Eyes", emoji: "👁️", tagline: "The gaze that holds the crown." },
+];
 
 // ----------------------------------------------------------------------------
 // iNaturalist
@@ -138,7 +150,7 @@ async function fetchObservation(obsId: bigint | number): Promise<INatObservation
     const photoUrl = upsizePhotoUrl(photos[0]?.url ?? null);
     const obs: INatObservation = {
       id: Number(idStr),
-      speciesGuess: result.species_guess ?? result.taxon?.name ?? "Lobster",
+      speciesGuess: result.species_guess ?? result.taxon?.name ?? "Creature",
       placeGuess: result.place_guess ?? "—",
       observedOn: result.observed_on ?? null,
       photoUrl: isAllowedPhotoUrl(photoUrl) ? photoUrl : null,
@@ -150,15 +162,15 @@ async function fetchObservation(obsId: bigint | number): Promise<INatObservation
   }
 }
 
-async function fetchLobsterList(): Promise<INatObservation[]> {
-  const cacheKey = "clawd:lobsters:Homarus";
+async function fetchCreatureList(): Promise<INatObservation[]> {
+  const cacheKey = "clawd:creatures:Animalia";
   const cached = lsGet<INatObservation[]>(cacheKey);
   if (cached && Date.now() - cached.storedAt < LIST_CACHE_TTL_MS) {
     return cached.value;
   }
   try {
     const res = await fetch(
-      "https://api.inaturalist.org/v1/observations?taxon_name=Homarus&photos=true&per_page=30&order=desc&order_by=observed_on&quality_grade=research",
+      "https://api.inaturalist.org/v1/observations?taxon_id=1&photos=true&per_page=30&order=desc&order_by=observed_on&quality_grade=research",
     );
     if (!res.ok) return [];
     const data = await res.json();
@@ -168,7 +180,7 @@ async function fetchLobsterList(): Promise<INatObservation[]> {
         const photoUrl = upsizePhotoUrl(photos[0]?.url ?? null);
         return {
           id: r.id as number,
-          speciesGuess: r.species_guess ?? r.taxon?.name ?? "Lobster",
+          speciesGuess: r.species_guess ?? r.taxon?.name ?? "Creature",
           placeGuess: r.place_guess ?? "—",
           observedOn: r.observed_on ?? null,
           photoUrl,
@@ -280,10 +292,10 @@ function decodeCategory(raw: readonly unknown[] | undefined): CategoryState | un
 }
 
 // ----------------------------------------------------------------------------
-// LobsterPhoto
+// CreaturePhoto
 // ----------------------------------------------------------------------------
 
-function LobsterPhoto({ obsId, size = "h-40" }: { obsId: bigint; size?: string }) {
+function CreaturePhoto({ obsId, size = "h-40" }: { obsId: bigint; size?: string }) {
   const { obs, loading } = usePhoto(obsId);
 
   if (obsId === 0n) return null;
@@ -297,7 +309,7 @@ function LobsterPhoto({ obsId, size = "h-40" }: { obsId: bigint; size?: string }
       <div
         className={`${size} w-full bg-base-200 rounded-lg flex items-center justify-center text-center text-xs px-3 opacity-70`}
       >
-        🌊 This lobster has returned to the sea — observation no longer available on iNaturalist.
+        🌿 This creature has returned to the wild — observation no longer available on iNaturalist.
       </div>
     );
   }
@@ -340,7 +352,7 @@ function ActionModal({
   useEffect(() => {
     if (!open) return;
     setListLoading(true);
-    fetchLobsterList().then(l => {
+    fetchCreatureList().then(l => {
       setList(l);
       setListLoading(false);
     });
@@ -387,9 +399,6 @@ function ActionModal({
     if (!account) return;
     try {
       setWaitingForAllowance(true);
-      // Mobile WalletConnect users: schedule a deep-link back to the wallet
-      // app so the approval prompt becomes the foreground activity. No-op
-      // on desktop and on wallets that don't expose a redirect URI.
       openWalletOnMobile();
       await writeErc20({
         chainId: CHAIN_ID,
@@ -418,7 +427,6 @@ function ActionModal({
     if (!account || !picked) return;
     try {
       const fnName = kind === "submit" ? "submit" : "challenge";
-      // Same mobile deep-link nudge for the submit/challenge tx itself.
       openWalletOnMobile();
       await writeSearch({
         functionName: fnName,
@@ -448,7 +456,7 @@ function ActionModal({
               {kind === "submit" ? "Submit Champion" : "Challenge Champion"} · {meta.emoji} {meta.title}
             </h3>
             <p className="text-sm opacity-70 mt-1 mb-0">
-              Pick a lobster from iNaturalist (research grade, real photos only).
+              Pick a creature from iNaturalist (research grade, real photos only).
             </p>
           </div>
           <button className="btn btn-sm btn-circle btn-ghost" onClick={onClose} aria-label="Close">
@@ -468,9 +476,9 @@ function ActionModal({
                 }}
                 disabled={list.length === 0}
               >
-                🎲 Random Lobster
+                🎲 Random Creature
               </button>
-              <span className="text-xs opacity-70">{list.length} lobsters with photos</span>
+              <span className="text-xs opacity-70">{list.length} creatures with photos</span>
             </div>
             {listLoading ? (
               <div className="grid grid-cols-3 gap-3 max-h-96 overflow-y-auto">
@@ -603,7 +611,7 @@ function ConfirmPanel({
         </div>
         {kind === "challenge" && (
           <div className="text-warning mt-1">
-            ⚠️ If your lobster loses, observation #{picked.id} cannot challenge this category again.
+            ⚠️ If your creature loses, observation #{picked.id} cannot challenge this category again.
           </div>
         )}
         <div className="opacity-60 mt-2">
@@ -718,7 +726,6 @@ function VoteButton({
       }
       if (allowance < VOTE_PRICE) {
         setWaitingForAllowance(true);
-        // Mobile WC: nudge wallet to foreground for approval prompt.
         openWalletOnMobile();
         await writeErc20({
           chainId: CHAIN_ID,
@@ -741,7 +748,6 @@ function VoteButton({
         });
         setWaitingForAllowance(false);
       }
-      // Mobile WC: nudge again for the vote tx itself.
       openWalletOnMobile();
       await writeSearch({
         functionName: "vote",
@@ -758,10 +764,6 @@ function VoteButton({
   const disabled = !account || hasUserVoted || !challengeOpen || approvePending || actionPending || waitingForAllowance;
   const pending = approvePending || actionPending || waitingForAllowance;
 
-  // Tooltip mirrors the burn/treasury split shown in submit/challenge confirmation
-  // modals — the vote action is a one-click flow without a confirmation modal,
-  // so we surface the split on hover/tap instead so users see where their CLAWD
-  // is going before they fire the tx.
   return (
     <div className="tooltip tooltip-top flex-1" data-tip="100 CLAWD: 🔥 50 burned + 🏛️ 50 to treasury">
       <button
@@ -796,7 +798,6 @@ function ResolveButton({ category, onResolved }: { category: Category; onResolve
   const { openWalletOnMobile } = useWriteAndOpen();
   const handle = async () => {
     try {
-      // Mobile WC: nudge wallet to foreground for the resolve tx.
       openWalletOnMobile();
       await writeContractAsync({ functionName: "resolve", args: [category] });
       notification.success("Resolved!");
@@ -820,7 +821,7 @@ function ResolveButton({ category, onResolved }: { category: Category; onResolve
 }
 
 // ----------------------------------------------------------------------------
-// Category Card
+// Category Card (active, wired to contract)
 // ----------------------------------------------------------------------------
 
 function CategoryCard({ category }: { category: Category }) {
@@ -932,6 +933,31 @@ function CategoryCard({ category }: { category: Category }) {
   );
 }
 
+// ----------------------------------------------------------------------------
+// Placeholder Card (coming soon, no contract calls)
+// ----------------------------------------------------------------------------
+
+function PlaceholderCard({ title, emoji, tagline }: { title: string; emoji: string; tagline: string }) {
+  return (
+    <div className="card bg-base-100 shadow-md border border-base-300 border-dashed flex flex-col opacity-70">
+      <div className="card-body p-5 flex flex-col gap-2">
+        <div className="flex items-start justify-between">
+          <h2 className="card-title text-base sm:text-lg my-0">
+            <span className="text-2xl">{emoji}</span>
+            <span>{title}</span>
+          </h2>
+          <span className="badge badge-outline badge-sm text-xs shrink-0">Coming Soon</span>
+        </div>
+        <p className="text-xs opacity-60 my-1">{tagline}</p>
+        <div className="flex flex-col items-center text-center gap-3 py-4">
+          <div className="text-4xl opacity-30">👑</div>
+          <p className="text-sm opacity-50 my-0">This crown is on the horizon.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChampionView({
   cat,
   championWins,
@@ -953,7 +979,7 @@ function ChampionView({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <LobsterPhoto obsId={cat.championObsId} />
+      <CreaturePhoto obsId={cat.championObsId} />
       <div className="text-xs flex flex-col gap-1">
         <div className="flex items-center justify-between">
           <span className="opacity-60">Submitter:</span>
@@ -1018,7 +1044,7 @@ function ChallengeView({
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
           <div className="text-[10px] opacity-60 uppercase tracking-wider">Champion</div>
-          <LobsterPhoto obsId={cat.championObsId} size="h-28" />
+          <CreaturePhoto obsId={cat.championObsId} size="h-28" />
           <div className="text-xs flex justify-between">
             <span className="opacity-60">Votes</span>
             <span className="font-bold">{cat.championVotes.toString()}</span>
@@ -1030,7 +1056,7 @@ function ChallengeView({
         </div>
         <div className="flex flex-col gap-1">
           <div className="text-[10px] opacity-60 uppercase tracking-wider">Challenger</div>
-          <LobsterPhoto obsId={cat.challengerObsId} size="h-28" />
+          <CreaturePhoto obsId={cat.challengerObsId} size="h-28" />
           <div className="text-xs flex justify-between">
             <span className="opacity-60">Votes</span>
             <span className="font-bold">{cat.challengerVotes.toString()}</span>
@@ -1094,13 +1120,13 @@ function HowItWorks() {
       <div className="collapse-content">
         <ol className="list-decimal list-inside space-y-3 text-sm">
           <li>
-            <strong>Submit a Champion.</strong> Pick a real lobster from iNaturalist and spend{" "}
+            <strong>Submit a Champion.</strong> Pick a real creature from iNaturalist and spend{" "}
             <strong>1,000 CLAWD</strong> to crown them champion of a category. Half is burned, half goes to the CLAWD
             treasury.
           </li>
           <li>
-            <strong>Challenge.</strong> Think you&apos;ve got a better lobster? Spend <strong>100 CLAWD</strong> to open
-            a 48-hour challenge against the current champion.
+            <strong>Challenge.</strong> Think you&apos;ve got a better creature? Spend <strong>100 CLAWD</strong> to
+            open a 48-hour challenge against the current champion.
           </li>
           <li>
             <strong>Vote.</strong> During an active challenge, anyone can vote for <strong>100 CLAWD</strong>. One vote
@@ -1167,8 +1193,8 @@ function HallOfFame() {
     return (
       <section className="mt-12">
         <h2 className="text-xl font-bold mb-4">Hall of Fame</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[0, 1, 2].map(i => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {ACTIVE_CATEGORIES.map(i => (
             <div key={i} className="h-40 bg-base-200 rounded-lg animate-pulse" />
           ))}
         </div>
@@ -1179,8 +1205,8 @@ function HallOfFame() {
   return (
     <section className="mt-12">
       <h2 className="text-xl font-bold mb-4">Hall of Fame</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {CATEGORY_LIST.map(cat => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {ACTIVE_CATEGORIES.map(cat => (
           <HallOfFameLane key={cat} category={cat} entries={byCategory[cat] ?? []} />
         ))}
       </div>
@@ -1262,7 +1288,7 @@ function HallOfFameEntry({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={obs.photoUrl} alt={`Obs ${entry.obsId}`} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs">🌊</div>
+          <div className="w-full h-full flex items-center justify-center text-xs">🌿</div>
         )}
       </div>
       <div className="flex-1 min-w-0">
@@ -1316,7 +1342,7 @@ function WalletStrip() {
     return (
       <div className="alert alert-warning flex items-center justify-between">
         <span className="text-sm">
-          Wrong network — Clawd Search lives on <strong>Base</strong>.
+          Wrong network — Creature Feature lives on <strong>Base</strong>.
         </span>
         <button
           className="btn btn-sm btn-primary"
@@ -1359,9 +1385,9 @@ export default function ClawdSearchApp() {
   return (
     <div className="flex flex-col grow">
       <main className="max-w-6xl mx-auto px-4 py-8 w-full flex flex-col gap-6">
-        <header className="text-center">
-          <h1 className="text-4xl sm:text-5xl font-bold my-2">🦞 Clawd Search</h1>
-          <p className="opacity-70 my-2">Real lobsters. Three crowns. One winner per category.</p>
+        <header className="text-center py-4">
+          <h1 className="text-5xl sm:text-6xl font-bold my-2 tracking-tight">Creature Feature</h1>
+          <p className="opacity-70 my-2 text-lg">Real creatures. Real competition.</p>
         </header>
 
         <WalletStrip />
@@ -1369,10 +1395,13 @@ export default function ClawdSearchApp() {
         <HowItWorks />
 
         <section>
-          <h2 className="text-xl font-bold mb-3">The Three Thrones</h2>
+          <h2 className="text-xl font-bold mb-3">The Crowns</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {CATEGORY_LIST.map(c => (
+            {ACTIVE_CATEGORIES.map(c => (
               <CategoryCard key={c} category={c} />
+            ))}
+            {PLACEHOLDER_CARDS.map(card => (
+              <PlaceholderCard key={card.title} title={card.title} emoji={card.emoji} tagline={card.tagline} />
             ))}
           </div>
         </section>
